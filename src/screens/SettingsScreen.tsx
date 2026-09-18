@@ -1,22 +1,114 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { useEntitlement } from '../context/EntitlementContext';
+import { useAccount } from '../context/AccountContext';
+import * as api from '../lib/api';
 import { CURRENCIES } from '../lib/currencies';
 import { computeStats, fmt } from '../lib/fuel-utils';
-import { Button } from '../components/ui';
+import { Button, Field } from '../components/ui';
 import { colors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+type ClaimUiState = 'idle' | 'loading' | 'unclaimed' | 'owned' | 'claimed_other' | 'error';
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { userCode, currencyCode, changeCurrency, deleteAllData, fills, vehicles, activeVehicleId } = useGarage();
+  const { userCode, currencyCode, changeCurrency, deleteAllData, restoreFromAccount, fills, vehicles, activeVehicleId } = useGarage();
   const { isPro, devClearPro, purchasePro } = useEntitlement();
+  const { session, sendMagicLink, signOut } = useAccount();
   const [copied, setCopied] = useState(false);
+
+  const [email, setEmail] = useState('');
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const [claimState, setClaimState] = useState<ClaimUiState>('idle');
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+
+  const refreshClaimStatus = useCallback(async () => {
+    if (!userCode || !session) { setClaimState('idle'); return; }
+    setClaimState('loading');
+    try {
+      const status = await api.getClaimStatus(userCode);
+      if (status.is_owner) setClaimState('owned');
+      else if (status.claimed) setClaimState('claimed_other');
+      else setClaimState('unclaimed');
+    } catch {
+      setClaimState('error');
+    }
+  }, [userCode, session]);
+
+  useEffect(() => { void refreshClaimStatus(); }, [refreshClaimStatus]);
+
+  async function handleSendMagicLink() {
+    if (!email.trim()) { setAuthError('Enter your email'); return; }
+    setAuthError(null);
+    setAuthBusy(true);
+    const result = await sendMagicLink(email.trim());
+    setAuthBusy(false);
+    if (result.ok) setMagicLinkSent(true);
+    else setAuthError(result.error ?? 'Could not send magic link');
+  }
+
+  async function handleClaim() {
+    if (!userCode) return;
+    setClaimBusy(true);
+    setClaimMessage(null);
+    const result = await api.claimGarage(userCode);
+    setClaimBusy(false);
+    if (result.ok) {
+      setClaimState('owned');
+      setClaimMessage('Garage linked to your account.');
+    } else {
+      setClaimMessage(result.error ?? 'Could not link garage');
+    }
+  }
+
+  async function handleUnlink() {
+    if (!userCode) return;
+    Alert.alert(
+      'Unlink this garage?',
+      'Your sync code and data stay intact — you’ll need the code (or to link again) on new devices.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unlink', style: 'destructive', onPress: async () => {
+            setClaimBusy(true);
+            const result = await api.unlinkGarage(userCode);
+            setClaimBusy(false);
+            if (result.ok) {
+              setClaimState('unclaimed');
+              setClaimMessage('Garage unlinked. Sync code still works.');
+            } else {
+              setClaimMessage(result.error ?? 'Could not unlink garage');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleRestoreFromAccount() {
+    Alert.alert(
+      'Switch to account garage?',
+      'This replaces the garage currently open here with the one linked to your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Switch', onPress: async () => {
+            const ok = await restoreFromAccount();
+            if (!ok) Alert.alert('No linked garage found for this account yet.');
+          },
+        },
+      ]
+    );
+  }
 
   async function copyCode() {
     if (!userCode) return;
@@ -100,6 +192,70 @@ export default function SettingsScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
+      <Text style={styles.sectionLabel}>Account</Text>
+      <View style={styles.card}>
+        {!session ? (
+          magicLinkSent ? (
+            <Text style={styles.hint}>
+              Check {email} for a sign-in link. Optional — your sync code keeps working without it.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.hint}>
+                Optional: sign in to link this garage to your account, so it restores on a new
+                device by logging in instead of retyping the code.
+              </Text>
+              <View style={{ marginTop: 10 }}>
+                <Field
+                  label="Email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+              {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+              <Button title="Send Magic Link" onPress={handleSendMagicLink} loading={authBusy} />
+            </>
+          )
+        ) : (
+          <>
+            <Text style={styles.code}>{session.user.email}</Text>
+            {claimState === 'owned' && (
+              <>
+                <Text style={[styles.hint, { color: colors.green }]}>
+                  This garage is linked to your account.
+                </Text>
+                <Pressable onPress={handleUnlink} disabled={claimBusy} style={styles.dangerLink}>
+                  <Text style={styles.dangerLinkText}>{claimBusy ? 'Unlinking…' : 'Unlink from account'}</Text>
+                </Pressable>
+              </>
+            )}
+            {claimState === 'claimed_other' && (
+              <Text style={[styles.hint, { color: colors.red }]}>
+                This sync code is linked to a different account.
+              </Text>
+            )}
+            {claimState === 'unclaimed' && (
+              <>
+                <Text style={styles.hint}>Link this garage to your account?</Text>
+                <Pressable onPress={handleClaim} disabled={claimBusy} style={styles.upgradeBtn}>
+                  <Text style={styles.upgradeBtnText}>{claimBusy ? 'Linking…' : 'Link This Garage'}</Text>
+                </Pressable>
+              </>
+            )}
+            {claimMessage && <Text style={styles.hint}>{claimMessage}</Text>}
+            <Pressable onPress={handleRestoreFromAccount} style={{ marginTop: 10 }}>
+              <Text style={styles.restoreLink}>Restore garage from account</Text>
+            </Pressable>
+            <Pressable onPress={() => void signOut()} style={styles.dangerLink}>
+              <Text style={styles.dangerLinkText}>Sign Out</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+
       <Text style={styles.sectionLabel}>Currency</Text>
       <View style={styles.chipRow}>
         {CURRENCIES.map((c) => (
@@ -152,4 +308,8 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, color: colors.muted },
   chipTextActive: { color: colors.text, fontWeight: '700' },
   close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
+  errorText: { color: colors.red, fontSize: 12, marginBottom: 8 },
+  dangerLink: { marginTop: 12 },
+  dangerLinkText: { color: colors.red, fontSize: 12, fontWeight: '700' },
+  restoreLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },
 });

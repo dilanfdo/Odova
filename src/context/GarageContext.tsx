@@ -1,8 +1,11 @@
 // Central state for the garage: sync code, vehicles, active vehicle's fills.
-// Mirrors the state machine in the web app's FuelTrackerClient.tsx, minus the
-// account-link/claim flow (V1 ships sync-code-only; see README "Phase 2").
+// Mirrors the state machine in the web app's FuelTrackerClient.tsx. Account
+// sign-in (AccountContext) is optional and orthogonal to this — being signed
+// in only ever *offers* to restore an account-linked garage, it never
+// silently replaces a garage already active in this session (see the boot
+// effect and restoreFromAccount below for exactly where that line is drawn).
 import React, {
-  createContext, useCallback, useContext, useEffect, useMemo, useState,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
 import * as api from '../lib/api';
 import { genCode, normaliseCode, type FillUp } from '../lib/fuel-utils';
@@ -12,6 +15,7 @@ import {
 } from '../lib/storage';
 import type { Vehicle } from '../lib/types';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode, type CurrencyCode } from '../lib/currencies';
+import { useAccount } from './AccountContext';
 
 export type Step = 'loading' | 'onboarding' | 'vehicle_setup' | 'main';
 
@@ -27,6 +31,7 @@ interface GarageContextValue {
 
   startNewGarage: (nickname: string) => Promise<void>;
   useExistingCode: (code: string) => Promise<boolean>;
+  restoreFromAccount: () => Promise<boolean>;
   addVehicle: (v: { make: string; model: string; year: string; fuelType: string; nickname: string }) => Promise<boolean>;
   setActiveVehicleId: (id: string) => void;
   addFill: (f: { fillDate: string; odometer: number; litres: number; pricePerLitre: number; isPartial: boolean; notes: string }) => Promise<boolean>;
@@ -40,6 +45,7 @@ interface GarageContextValue {
 const GarageContext = createContext<GarageContextValue | null>(null);
 
 export function GarageProvider({ children }: { children: React.ReactNode }) {
+  const { session, loading: accountLoading } = useAccount();
   const [step, setStep] = useState<Step>('loading');
   const [userCode, setUserCode] = useState<string | null>(null);
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(DEFAULT_CURRENCY);
@@ -49,8 +55,15 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Guards the automatic account-restore attempt below to run at most once —
+  // it's only ever meant to answer "no local garage on this device yet, but
+  // I'm signed in, do I have one in the cloud?", not to re-fire and clobber
+  // whatever's active every time auth state changes later in the session.
+  const accountRestoreAttempted = useRef(false);
+
   // ── Boot: restore sync code from device storage, then load its garage ──────
   useEffect(() => {
+    if (accountLoading) return;
     let cancelled = false;
     (async () => {
       const [storedCode, storedCurrency] = await Promise.all([getStoredCode(), getStoredCurrency()]);
@@ -58,18 +71,39 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
       if (storedCurrency) setCurrencyCode(normalizeCurrencyCode(storedCurrency));
 
       if (!storedCode) {
-        setStep('onboarding');
+        if (session && !accountRestoreAttempted.current) {
+          accountRestoreAttempted.current = true;
+          try {
+            const account = await api.fetchAccountGarage();
+            if (!cancelled && account.code && account.vehicles.length > 0) {
+              await setStoredCode(account.code);
+              setUserCode(account.code);
+              setVehicles(account.vehicles);
+              setActiveVehicleId(account.vehicles[0].id);
+              setStep('main');
+              return;
+            }
+          } catch {
+            // fall through to onboarding — account restore is best-effort
+          }
+        }
+        if (!cancelled) setStep('onboarding');
         return;
       }
       try {
         const { vehicles: list, locked } = await api.fetchVehicles(storedCode);
         if (cancelled) return;
         if (locked) {
-          // Claimed by an account since last used here — Odova has no sign-in
-          // yet, so this code can't be loaded. Don't silently create a new
-          // vehicle under it; drop back to onboarding with an explanation.
+          // Claimed by an account — the server already checked our session
+          // (Bearer token, if signed in) and it doesn't own this garage.
+          // Don't silently create a new vehicle under someone else's code;
+          // drop back to onboarding with an honest explanation.
           await clearStoredCode();
-          setError('This garage is linked to an account. Sign-in isn’t available in this app version yet — use the web app, or start a new garage below.');
+          setError(
+            session
+              ? 'This garage is linked to a different account. Sign in with that account, or start a new garage below.'
+              : 'This garage is linked to an account. Sign in to access it, or start a new garage below.'
+          );
           setStep('onboarding');
           return;
         }
@@ -89,7 +123,7 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [accountLoading, session]);
 
   // ── Fetch fills whenever the active vehicle changes ─────────────────────────
   const refreshFills = useCallback(async () => {
@@ -122,7 +156,11 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
     try {
       const { vehicles: list, locked } = await api.fetchVehicles(code);
       if (locked) {
-        setError('This garage is linked to an account. Sign-in isn’t available in this app version yet — use the web app to access it.');
+        setError(
+          session
+            ? 'This garage is linked to a different account. Sign in with that account to access it.'
+            : 'This garage is linked to an account. Sign in to access it.'
+        );
         return false;
       }
       if (list.length === 0) {
@@ -139,7 +177,29 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
       setError('Could not connect. Please try again.');
       return false;
     }
-  }, []);
+  }, [session]);
+
+  // Explicit, user-initiated switch to the signed-in account's garage — unlike
+  // the boot-time auto-restore above, this can run at any time (e.g. a
+  // "Restore from account" button in Settings) and deliberately requires a
+  // deliberate call rather than firing on every auth-state change, so signing
+  // in mid-session never silently swaps out a garage already in use.
+  const restoreFromAccount = useCallback(async (): Promise<boolean> => {
+    if (!session) return false;
+    try {
+      const account = await api.fetchAccountGarage();
+      if (!account.code || account.vehicles.length === 0) return false;
+      await setStoredCode(account.code);
+      setUserCode(account.code);
+      setVehicles(account.vehicles);
+      setActiveVehicleId(account.vehicles[0].id);
+      setFills([]);
+      setStep('main');
+      return true;
+    } catch {
+      return false;
+    }
+  }, [session]);
 
   const addVehicle = useCallback(async (v: { make: string; model: string; year: string; fuelType: string; nickname: string }) => {
     if (!userCode) return false;
@@ -209,10 +269,10 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<GarageContextValue>(() => ({
     step, userCode, currencyCode, vehicles, activeVehicleId, fills, dataLoading, error,
-    startNewGarage, useExistingCode, addVehicle, setActiveVehicleId, addFill,
+    startNewGarage, useExistingCode, restoreFromAccount, addVehicle, setActiveVehicleId, addFill,
     removeFill, removeVehicle, deleteAllData, changeCurrency, refreshFills,
   }), [step, userCode, currencyCode, vehicles, activeVehicleId, fills, dataLoading, error,
-    startNewGarage, useExistingCode, addVehicle, addFill, removeFill, removeVehicle,
+    startNewGarage, useExistingCode, restoreFromAccount, addVehicle, addFill, removeFill, removeVehicle,
     deleteAllData, changeCurrency, refreshFills]);
 
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>;

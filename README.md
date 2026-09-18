@@ -22,20 +22,29 @@ is a second client of `nexusdigitallabs.dev/api/fuel`, not a fork of the databas
   this (calling `/api/fuel` without it 308-redirects, which browsers block on
   preflight — not an issue for native `fetch`, which isn't subject to CORS at all).
 
-## Scope (V1)
+## Scope
 
-Sync-code-only — no account-link/claim flow yet. The web app's optional
-"link this garage to your account" feature depends on Supabase Auth session
-cookies via `@supabase/ssr`, which doesn't translate directly to a mobile bearer-
-token flow. Phase 2 (see below) adds this properly instead of hacking around it.
+Sync-code garage identity (as on web) plus an *optional* account layer: sign in
+via magic link to claim a garage, so it restores by logging in instead of
+retyping the code. Account sign-in never replaces the sync code — it's purely
+additive, and everything works exactly as before if you never sign in.
+
+The web app's account flow uses Supabase Auth session **cookies**
+(`@supabase/ssr`), which a mobile app has no jar to share — so this app runs
+its own Supabase Auth session (JWT, stored via `AsyncStorage`) and sends it as
+an `Authorization: Bearer` header. `/api/fuel` on the NDL side accepts either:
+cookie session (web) or Bearer token (mobile), same endpoints, same
+`claim_fuel_garage`/`unlink_fuel_garage` RPCs — see that repo's
+`route.ts` `getSignedInUserId()`.
 
 ## Project layout
 
 ```
 src/
   lib/            fuel-utils, currencies, api client, reminders, notifications,
-                   entitlements (Pro), AsyncStorage, config
-  context/        GarageContext (sync code/vehicles/fills), EntitlementContext (Pro)
+                   entitlements (Pro), supabase (Auth client), AsyncStorage, config
+  context/        GarageContext (sync code/vehicles/fills),
+                   EntitlementContext (Pro), AccountContext (sign-in/claim)
   navigation/     RootNavigator — swaps stacks based on GarageContext's `step`
   screens/        Onboarding, VehicleSetup, Dashboard, AddFill, AddVehicle,
                    Settings, Maintenance, AddReminder, Paywall
@@ -43,6 +52,33 @@ src/
                    ProGate (soft-paywall wrapper), ui.tsx
   theme.ts        Ported NDL dark-theme color tokens
 ```
+
+## Account sign-in (magic link)
+
+`src/context/AccountContext.tsx` + `src/lib/supabase.ts`. Two real constraints
+found by testing this live in Expo Go, not by reading docs — both fixed, worth
+knowing if you touch this code:
+
+- **PKCE flow doesn't work in Hermes.** Supabase JS defaults to `flowType:
+  'pkce'`, which needs `crypto.subtle.digest` to hash the code verifier — not
+  present in React Native's JS engine, confirmed live ("WebCrypto API is not
+  supported"). Fixed by using `flowType: 'implicit'` instead, which returns
+  `access_token`/`refresh_token` directly in the redirect URL's fragment (see
+  `extractTokensFromUrl` in `AccountContext.tsx`) — no crypto primitive needed.
+  A real polyfill (`react-native-quick-crypto` or similar) would let PKCE work,
+  but needs a native build either way.
+- **The Supabase project's Auth → URL Configuration → Redirect URLs allowlist
+  needs the app's deep link added**, or the emailed link will be rejected when
+  tapped even though *sending* it succeeds. `Linking.createURL('auth/callback')`
+  produces a stable `odova://auth/callback` in a real build, but a **dynamic**
+  `exp://<lan-ip>:<port>/--/auth/callback` in Expo Go (changes per machine/
+  network) — so the full round trip (tap the email link, land back in the app
+  signed in) is only reliably testable from an EAS dev/production build, not
+  Expo Go. Sending the magic link itself, and everything after a session
+  exists, was verified working in Expo Go; the deep-link callback itself
+  wasn't (no test inbox access in this pass, plus the above).
+
+## Monetization: Pro entitlement
 
 ## Monetization: Pro entitlement
 
@@ -77,8 +113,16 @@ through the real (not-yet-built) purchase flow. To wire up real billing:
 (AsyncStorage), due by date or by odometer reading. Odometer-based status is
 computed against the vehicle's latest logged fill-up odometer (`GarageContext`).
 Date-based reminders schedule a local notification via `expo-notifications`
-(`src/lib/notifications.ts`) for 9am on the due date — this works in Expo Go on
-Android for local (non-push) notifications.
+(`src/lib/notifications.ts`) for 9am on the due date.
+
+**`expo-notifications` must be imported lazily** (dynamic `import()` inside
+each function, never at module top level) — confirmed live: a top-level import
+crashed the app on *every launch* in Expo Go (not just when scheduling), because
+Expo Go on SDK 53+ removed remote-push support and the package throws on import
+there, and `notifications.ts` was transitively imported from `App.tsx` at boot.
+`isExpoGo` (via `expo-constants`) short-circuits to a no-op in Expo Go entirely;
+reminders still save correctly, just without an OS notification, until run from
+a real EAS build.
 
 Not yet built: recurring reminders (e.g. "every 5,000 km"), service history log,
 document vault (insurance/registration with expiry alerts) — see Phase 2.
@@ -98,20 +142,33 @@ No `.env` is required for production use — `src/lib/config.ts` defaults to
 `https://nexusdigitallabs.dev`. Copy `.env.example` to `.env` only to point at a
 local `next dev` server.
 
-## Verified end-to-end (2026-09-17)
+## Verified end-to-end (2026-09-18)
 
 Confirmed on a real Android emulator (Pixel 9a, Android 17, via Expo Go): full
 onboarding → vehicle creation → fill-up logging → dashboard stats/chart/history
-flow, all against the live production API (no mocks). Also confirmed via direct
-HTTPS calls that create-vehicle, add-fill, and fetch-fills round-trip with
-exactly the shapes `src/lib/api.ts` and `src/lib/fuel-utils.ts` expect.
-`npx tsc --noEmit` and `npx expo-doctor` both pass clean.
+flow, all against the live production API (no mocks); Settings' new Account
+section (email → magic-link send succeeds, correct success-state UI); Pro
+soft-paywall gates (Maintenance, 2nd vehicle, CSV export) all correctly route
+to the paywall for a free-tier user. Also confirmed via direct HTTPS calls
+against the NDL production API, using a disposable real Supabase auth user,
+that the full claim/unlock lifecycle works over a Bearer token exactly as it
+does over the web app's cookie session: create → claim → locked for
+non-owners → visible to the owner → restorable via `resource=account` →
+unlink → open again, plus a malformed token degrading gracefully (`locked:
+true`, not a 500). `npx tsc --noEmit` and `npx expo-doctor` both pass clean in
+this repo; the NDL repo's 287 tests pass.
 
-Found and fixed one real bug in this pass: `DashboardScreen`'s header rendered
-underneath the Android system status bar (missing safe-area top inset), which
-made "Settings"/"+ Vehicle" untappable on a real device even though they looked
-fine in the (safe-area-agnostic) web preview — fixed by wrapping screens in
-`SafeAreaView` from `react-native-safe-area-context`.
+Found and fixed three real bugs in this pass, none of which would have shown
+up without actually running the app:
+1. `DashboardScreen`'s header rendered underneath the Android system status
+   bar (missing safe-area top inset), making "Settings"/"+ Vehicle" silently
+   untappable on a real device despite looking fine in the (safe-area-agnostic)
+   web preview — fixed with `SafeAreaView` from `react-native-safe-area-context`.
+2. A rate-limiter bug on the NDL side: read and write requests shared one
+   per-IP budget, so a burst of reads could wrongly exhaust a user's write
+   budget — fixed by keying them independently (see that repo's commit).
+3. The two Expo Go constraints under "Account sign-in" above (notifications
+   crash on boot; PKCE needs an absent WebCrypto primitive).
 
 ## Play Store path
 
@@ -125,9 +182,16 @@ fine in the (safe-area-agnostic) web preview — fixed by wrapping screens in
 
 ## Phase 2 (not yet built)
 
-- Real Google Play Billing wiring (see above)
-- Account-link parity with the web app (bearer-token auth against `/api/fuel`,
-  or a dedicated mobile auth endpoint) — needed before cloud sync of
-  vehicles/reminders can ship
+- Real Google Play Billing wiring (see Monetization above) — recommended
+  approach is RevenueCat (`react-native-purchases`), one integration for both
+  Play Billing and StoreKit
+- Server-side entitlement enforcement — `/api/fuel` currently trusts the
+  client's Pro gating entirely (e.g. nothing stops a direct API call from
+  creating a 2nd vehicle for a free-tier user); needs a RevenueCat webhook
+  writing verified entitlement to `profiles` once real billing exists
 - Recurring maintenance reminders, service history log, document vault
   (insurance/registration with expiry alerts)
+- iOS: same JS/TS codebase works unchanged (Supabase JS, AsyncStorage, and
+  RevenueCat all support iOS natively) — remaining work is infrastructure
+  only (Apple Developer account, App Store Connect product IDs, `eas build
+  --platform ios`), not architecture

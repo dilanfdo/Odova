@@ -9,10 +9,25 @@ import type { Vehicle } from './types';
 // extra hop (and avoids CORS-blocking that redirect in browser-based testing).
 const FUEL_ENDPOINT = `${API_BASE_URL}/api/fuel/`;
 
+// AccountContext registers a getter here once it mounts, so this module (which
+// has no React context of its own) can attach the signed-in user's token to
+// every request without every call site having to thread it through. No
+// account/never signed in → getter returns null → header omitted, exactly
+// today's anonymous sync-code-only behaviour.
+let getAccessToken: () => string | null = () => null;
+export function setAccessTokenGetter(getter: () => string | null): void {
+  getAccessToken = getter;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAccessToken();
   const res = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
   const json = await res.json();
   if (!res.ok) {
@@ -95,4 +110,38 @@ export async function deleteAllGarageData(code: string): Promise<void> {
     method: 'DELETE',
     body: JSON.stringify({ resource: 'user', code }),
   });
+}
+
+export interface ClaimStatus {
+  claimed: boolean;
+  is_owner: boolean;
+  signed_in: boolean;
+}
+
+export async function getClaimStatus(code: string): Promise<ClaimStatus> {
+  return apiFetch<ClaimStatus>(`${FUEL_ENDPOINT}?code=${encodeURIComponent(code)}&resource=claim_status`);
+}
+
+export async function claimGarage(code: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await apiFetch(FUEL_ENDPOINT, { method: 'POST', body: JSON.stringify({ resource: 'claim', code }) });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not link garage' };
+  }
+}
+
+export async function unlinkGarage(code: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await apiFetch(FUEL_ENDPOINT, { method: 'POST', body: JSON.stringify({ resource: 'unlink', code }) });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not unlink garage' };
+  }
+}
+
+/** Restores the signed-in account's garage (no sync code required). */
+export async function fetchAccountGarage(): Promise<{ code: string | null; vehicles: Vehicle[] }> {
+  const json = await apiFetch<{ data: Vehicle[]; code: string | null }>(`${FUEL_ENDPOINT}?resource=account`);
+  return { code: json.code, vehicles: json.data ?? [] };
 }

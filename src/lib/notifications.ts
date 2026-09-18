@@ -13,10 +13,8 @@
 // one action that needs it, and every function here already treats "can't
 // schedule" as a silent no-op — reminders still work, just without an OS
 // notification, until run from a real EAS dev/production build.
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-
-const isExpoGo = Constants.appOwnership === 'expo';
+import { isExpoGo } from './platform';
 
 let handlerReady = false;
 async function loadNotifications() {

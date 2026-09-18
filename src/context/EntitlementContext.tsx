@@ -4,7 +4,7 @@ import * as entitlements from '../lib/entitlements';
 interface EntitlementContextValue {
   isPro: boolean;
   loading: boolean;
-  purchasePro: () => Promise<boolean>;
+  purchasePro: () => Promise<{ ok: boolean; error?: string }>;
   restorePurchases: () => Promise<boolean>;
   devClearPro: () => Promise<void>;
 }
@@ -25,7 +25,7 @@ export function EntitlementProvider({ children }: { children: React.ReactNode })
   const purchasePro = useCallback(async () => {
     const result = await entitlements.purchasePro();
     if (result.ok) setIsPro(true);
-    return result.ok;
+    return result;
   }, []);
 
   const restorePurchases = useCallback(async () => {

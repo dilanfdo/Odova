@@ -80,12 +80,10 @@ knowing if you touch this code:
 
 ## Monetization: Pro entitlement
 
-## Monetization: Pro entitlement
-
 One-time purchase (no subscription). Free tier: 1 vehicle, local-only storage,
 full fill-up logging and efficiency charts. Pro unlocks: unlimited vehicles,
 maintenance reminders (date or odometer, with local notifications), CSV export,
-and (Phase 2) cloud account sync.
+cloud account sync (see "Account sign-in" above).
 
 **Soft-paywall pattern** — free users can see every Pro feature, not just a
 locked menu item, so they know what they'd get: `ProGate`
@@ -93,19 +91,52 @@ locked menu item, so they know what they'd get: `ProGate`
 lock overlay with a description and an "Unlock with Pro" button that opens
 `PaywallScreen`. See it on the Maintenance screen.
 
-**Billing is not wired to Google Play yet** — `src/lib/entitlements.ts` is a
-local simulation (AsyncStorage-backed) so the paywall UX could be built and
-tested in Expo Go, where native IAP modules can't load at all (`react-native-iap`
-needs a custom EAS dev client, not Expo Go). Settings has a `__DEV__`-only
-"Simulate Pro purchase" toggle for testing the gated screens without going
-through the real (not-yet-built) purchase flow. To wire up real billing:
-1. Create a Google Play Developer account and the app entry, then a one-time
-   product `odova_pro_unlock` in Play Console.
-2. Add `react-native-iap`, build an EAS dev client (`eas build --profile
-   development`), since Expo Go can't load it.
-3. Replace the bodies of `purchasePro`/`restorePurchases` in
-   `src/lib/entitlements.ts` with real `requestPurchase`/
-   `getAvailablePurchases` calls — nothing else in the app needs to change.
+**Billing: RevenueCat (`react-native-purchases`), one integration for both
+Google Play Billing and Apple StoreKit.** `src/lib/entitlements.ts` checks for
+a configured API key (`config.ts`'s `REVENUECAT_API_KEY_ANDROID`/`_IOS`, both
+empty by default — no RevenueCat project exists for Odova yet) and falls back
+automatically to a local AsyncStorage-backed simulation when unset — so the
+app, and Expo Go testing, keep working exactly as before with zero setup.
+Settings has a `__DEV__`-only "Simulate Pro purchase" toggle for exercising
+the gated screens either way. `react-native-purchases` is a native module and
+throws if loaded in Expo Go the same way `expo-notifications` does — guarded
+the same way (`isExpoGo` from `src/lib/platform.ts`, dynamic import), so it's
+never even attempted there regardless of whether a key is set.
+
+To go live:
+1. Create the one-time `odova_pro_unlock` product in Play Console and App
+   Store Connect.
+2. Create a RevenueCat project, add both stores, create an entitlement (id:
+   `pro`, matching `REVENUECAT_ENTITLEMENT_ID` in `config.ts`) mapped to that
+   product on each store.
+3. Set `EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID` / `_IOS` (RevenueCat dashboard
+   → API keys). Once set, `entitlements.ts` automatically uses the real SDK —
+   no other file needs to change.
+4. Build with EAS (`eas build --profile development` to test, since Expo Go
+   can't load this native module at all).
+5. For server-side entitlement records (not required for the client gating
+   above to work, but the prerequisite for ever enforcing Pro limits
+   server-side instead of trusting the client — a gap the original security
+   audit flagged): apply the NDL repo's
+   `supabase/migrations/010_pro_entitlements.sql` (manually, via the Supabase
+   SQL editor — see that repo's README for why this can't be scripted here),
+   set `REVENUECAT_WEBHOOK_SECRET` there, and point a RevenueCat dashboard
+   webhook at `/api/revenuecat-webhook`.
+
+**Not live-tested** — unlike everything else in this README, this integration
+couldn't be run end-to-end in this pass: it needs a Play Console/App Store
+Connect/RevenueCat account (none exist yet) and a native build (Expo Go can't
+load it). What *was* verified: every RevenueCat call site's argument and
+return shapes were checked directly against the installed SDK's TypeScript
+definitions (`node_modules/@revenuecat/purchases-typescript-internal`), the
+whole file typechecks clean, and the automatic dev-simulation fallback was
+exercised live on the Android emulator (Settings' Pro toggle, gated features
+un/re-locking correctly) to confirm the fallback path — and by extension the
+calling code in `EntitlementContext`/`PaywallScreen`/`SettingsScreen` — works.
+The webhook endpoint *was* fully tested (auth, validation, event-type
+handling, graceful failure) against a local dev server with synthetic
+RevenueCat-shaped payloads and a Vitest suite (11 tests,
+`src/app/api/revenuecat-webhook/__tests__/route.test.ts` in the NDL repo).
 
 ## Maintenance reminders (Pro)
 
@@ -182,13 +213,15 @@ up without actually running the app:
 
 ## Phase 2 (not yet built)
 
-- Real Google Play Billing wiring (see Monetization above) — recommended
-  approach is RevenueCat (`react-native-purchases`), one integration for both
-  Play Billing and StoreKit
-- Server-side entitlement enforcement — `/api/fuel` currently trusts the
+- Actually creating the Play Console/App Store Connect/RevenueCat accounts
+  and products, and running an EAS build to test the real (non-simulated)
+  purchase flow — the integration code is done (see Monetization above), this
+  is account creation + a build, not a code change
+- Server-side entitlement *enforcement* — `/api/fuel` currently trusts the
   client's Pro gating entirely (e.g. nothing stops a direct API call from
-  creating a 2nd vehicle for a free-tier user); needs a RevenueCat webhook
-  writing verified entitlement to `profiles` once real billing exists
+  creating a 2nd vehicle for a free-tier user). The webhook that *records*
+  verified entitlement (`pro_entitlements` table) is built; nothing reads it
+  to enforce limits yet
 - Recurring maintenance reminders, service history log, document vault
   (insurance/registration with expiry alerts)
 - iOS: same JS/TS codebase works unchanged (Supabase JS, AsyncStorage, and

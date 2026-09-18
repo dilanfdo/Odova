@@ -25,8 +25,14 @@ export default function PaywallScreen({ navigation }: Props) {
   async function handlePurchase() {
     setBusy(true);
     try {
-      const ok = await purchasePro();
-      if (ok) navigation.goBack();
+      const result = await purchasePro();
+      if (result.ok) {
+        navigation.goBack();
+      } else if (result.error) {
+        // No error field means the user cancelled the store sheet — not an
+        // error worth interrupting them with an alert for.
+        Alert.alert('Purchase failed', result.error);
+      }
     } finally {
       setBusy(false);
     }

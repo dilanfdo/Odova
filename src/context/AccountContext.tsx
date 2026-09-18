@@ -6,12 +6,13 @@
 // for what NOT yet built here (this ships the core flow, not every edge case
 // the multi-thousand-line web client handles).
 import React, {
-  createContext, useCallback, useContext, useEffect, useState,
+  createContext, useCallback, useContext, useEffect, useRef, useState,
 } from 'react';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { setAccessTokenGetter } from '../lib/api';
+import { linkEntitlementToAccount, unlinkEntitlementFromAccount } from '../lib/entitlements';
 
 interface AccountContextValue {
   session: Session | null;
@@ -44,6 +45,20 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setAccessTokenGetter(() => session?.access_token ?? null);
+  }, [session]);
+
+  // Tie the RevenueCat purchase identity to the Supabase account — this is
+  // intentionally decoupled from EntitlementContext (no direct call into it):
+  // AccountProvider is an ancestor of EntitlementProvider in App.tsx, so it
+  // can't consume that context anyway, and "Restore Purchases" in the
+  // paywall already covers picking up Pro status after signing in elsewhere.
+  const lastLinkedUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const userId = session?.user.id ?? null;
+    if (userId === lastLinkedUserId.current) return;
+    lastLinkedUserId.current = userId;
+    if (userId) void linkEntitlementToAccount(userId);
+    else void unlinkEntitlementFromAccount();
   }, [session]);
 
   useEffect(() => {

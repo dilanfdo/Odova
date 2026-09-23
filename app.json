@@ -26,6 +26,12 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d4f6813f-317e-4961-90e4-decb5b0434c4"
+      }
+    },
+    "owner": "dilanfdodevs-team"
   }
 }

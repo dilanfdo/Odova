@@ -26,8 +26,8 @@ export const SUPABASE_ANON_KEY =
 export const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID ?? '';
 export const REVENUECAT_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS ?? '';
 
-// One entitlement ("pro") mapped in the RevenueCat dashboard to a product on
-// each store — see src/lib/entitlements.ts's header comment for the full
-// wiring steps. Must match whatever entitlement identifier is actually
-// configured there; this is not a secret, just needs to match.
-export const REVENUECAT_ENTITLEMENT_ID = 'pro';
+// One entitlement ("odova_pro") mapped in the RevenueCat dashboard to a
+// product on each store — see src/lib/entitlements.ts's header comment for
+// the full wiring steps. Must match whatever entitlement identifier is
+// actually configured there; this is not a secret, just needs to match.
+export const REVENUECAT_ENTITLEMENT_ID = 'odova_pro';

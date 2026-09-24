@@ -14,7 +14,7 @@
     "android": {
       "package": "dev.nexusdigitallabs.odova",
       "adaptiveIcon": {
-        "backgroundColor": "#2563eb",
+        "backgroundColor": "#0b0e1a",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

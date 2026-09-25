@@ -17,6 +17,8 @@ export function LineChart({
   yLabel: string;
   emptyHint: string;
 }) {
+  points = points.filter((p) => Number.isFinite(p.y));
+
   if (points.length < 2) {
     return (
       <View style={styles.empty}>

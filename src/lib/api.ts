@@ -1,7 +1,7 @@
 // Thin client for the NDL `/api/fuel` REST endpoint (same backend the web app uses).
 // Mirrors nexusdigitallabs.github.io/src/components/tools/FuelTrackerClient.tsx's fetch calls.
 import { API_BASE_URL } from './config';
-import type { FillUp } from './fuel-utils';
+import { friendlyError, type FillUp } from './fuel-utils';
 import type { Vehicle } from './types';
 
 // Trailing slash required — the NDL site runs Next.js with `trailingSlash: true`,
@@ -127,7 +127,7 @@ export async function claimGarage(code: string): Promise<{ ok: boolean; error?: 
     await apiFetch(FUEL_ENDPOINT, { method: 'POST', body: JSON.stringify({ resource: 'claim', code }) });
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not link garage' };
+    return { ok: false, error: e instanceof Error ? friendlyError(e.message) : 'Could not link garage' };
   }
 }
 
@@ -136,7 +136,7 @@ export async function unlinkGarage(code: string): Promise<{ ok: boolean; error?:
     await apiFetch(FUEL_ENDPOINT, { method: 'POST', body: JSON.stringify({ resource: 'unlink', code }) });
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not unlink garage' };
+    return { ok: false, error: e instanceof Error ? friendlyError(e.message) : 'Could not unlink garage' };
   }
 }
 

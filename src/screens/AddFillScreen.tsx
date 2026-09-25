@@ -27,6 +27,24 @@ export default function AddFillScreen({ navigation }: Props) {
       return;
     }
     const odo = parseFloat(odometer);
+    const lit = parseFloat(litres);
+    const ppl = parseFloat(price);
+    if (!Number.isFinite(odo) || !Number.isFinite(lit) || !Number.isFinite(ppl)) {
+      setLocalError('Odometer, litres, and price must be valid numbers');
+      return;
+    }
+    if (lit <= 0) {
+      setLocalError('Litres must be greater than 0');
+      return;
+    }
+    if (ppl <= 0) {
+      setLocalError('Price per litre must be greater than 0');
+      return;
+    }
+    if (odo < 0) {
+      setLocalError('Odometer cannot be negative');
+      return;
+    }
     const stats = computeStats(fills);
     const lastOdo = stats.length > 0 ? stats[stats.length - 1].fill.odometer : null;
     if (lastOdo !== null && odo <= lastOdo) {
@@ -36,8 +54,8 @@ export default function AddFillScreen({ navigation }: Props) {
     setLocalError('');
     setBusy(true);
     const ok = await addFill({
-      fillDate, odometer: odo, litres: parseFloat(litres),
-      pricePerLitre: parseFloat(price), isPartial, notes,
+      fillDate, odometer: odo, litres: lit,
+      pricePerLitre: ppl, isPartial, notes,
     });
     setBusy(false);
     if (ok) navigation.goBack();

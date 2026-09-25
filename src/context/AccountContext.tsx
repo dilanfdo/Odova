@@ -13,6 +13,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { setAccessTokenGetter } from '../lib/api';
 import { linkEntitlementToAccount, unlinkEntitlementFromAccount } from '../lib/entitlements';
+import { friendlyError } from '../lib/fuel-utils';
 
 interface AccountContextValue {
   session: Session | null;
@@ -94,7 +95,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const sendMagicLink = useCallback(async (email: string) => {
     const redirectTo = Linking.createURL('auth/callback');
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
-    return error ? { ok: false, error: error.message } : { ok: true };
+    return error ? { ok: false, error: friendlyError(error.message) } : { ok: true };
   }, []);
 
   const signOut = useCallback(async () => {

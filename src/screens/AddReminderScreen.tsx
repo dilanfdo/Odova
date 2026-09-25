@@ -26,8 +26,22 @@ export default function AddReminderScreen({ navigation }: Props) {
   async function handleSave() {
     if (!activeVehicleId) return;
     if (!title.trim()) { setError('Give the reminder a title'); return; }
-    if (dueType === 'date' && !dueDate.trim()) { setError('Enter a due date'); return; }
-    if (dueType === 'odometer' && !dueOdometer.trim()) { setError('Enter a due odometer reading'); return; }
+    if (dueType === 'date') {
+      const trimmed = dueDate.trim();
+      if (!trimmed) { setError('Enter a due date'); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || Number.isNaN(new Date(trimmed).getTime())) {
+        setError('Enter a valid date in YYYY-MM-DD format');
+        return;
+      }
+    }
+    if (dueType === 'odometer') {
+      const trimmed = dueOdometer.trim();
+      if (!trimmed) { setError('Enter a due odometer reading'); return; }
+      if (!Number.isFinite(parseFloat(trimmed))) {
+        setError('Enter a valid odometer reading');
+        return;
+      }
+    }
     setError('');
     setBusy(true);
     try {

@@ -61,6 +61,14 @@ export function fmtDate(d: string): string {
 // ── Backend error translation ───────────────────────────────────────────────────
 export function friendlyError(raw: string): string {
   const r = raw.toLowerCase();
+  if (
+    r.includes('unknownhostexception') || r.includes('network request failed') ||
+    r.includes('fetch failed') || r.includes('failed to fetch') ||
+    r.includes('econnrefused') || r.includes('etimedout') || r.includes('enotfound') ||
+    r.includes('no address associated with hostname')
+  ) {
+    return 'No internet connection. Please check your connection and try again.';
+  }
   if (r.includes('invalid api key') || r.includes('invalid_key') || r.includes('apikey')) {
     return 'Could not reach the data service. Please try again in a moment.';
   }
@@ -97,7 +105,7 @@ export function computeStats(fills: FillUp[]): FillStats[] {
       return { fill, distance: null, l100km: null, kmpl: null, totalCost, costPerKm: null, isFirst: false };
     }
     const dist = fill.odometer - sorted[i - 1].odometer;
-    if (dist <= 0) {
+    if (dist <= 0 || fill.litres <= 0) {
       return { fill, distance: null, l100km: null, kmpl: null, totalCost, costPerKm: null, isFirst: false };
     }
     return {

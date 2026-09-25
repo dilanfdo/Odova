@@ -14,9 +14,14 @@ export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void }
   const [fuelType, setFuelType] = useState('Petrol');
   const [nickname, setNickname] = useState('');
   const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState('');
 
   async function handleSave() {
-    if (!make.trim() || !model.trim()) return;
+    if (!make.trim() || !model.trim()) {
+      setLocalError('Make and model are required');
+      return;
+    }
+    setLocalError('');
     setBusy(true);
     const ok = await addVehicle({ make, model, year, fuelType, nickname });
     setBusy(false);
@@ -52,7 +57,7 @@ export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void }
 
       <Field label="Nickname (optional)" placeholder="Daily driver" value={nickname} onChangeText={setNickname} />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {(localError || error) ? <Text style={styles.error}>{localError || error}</Text> : null}
 
       <Button title="Save Vehicle" variant="fill" onPress={handleSave} loading={busy} style={{ marginTop: 8 }} />
     </ScrollView>

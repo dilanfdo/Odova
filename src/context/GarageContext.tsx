@@ -8,7 +8,7 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
 import * as api from '../lib/api';
-import { genCode, normaliseCode, type FillUp } from '../lib/fuel-utils';
+import { genCode, normaliseCode, friendlyError, type FillUp } from '../lib/fuel-utils';
 import {
   getStoredCode, setStoredCode, clearStoredCode,
   getStoredCurrency, setStoredCurrency,
@@ -214,7 +214,7 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
       setStep('main');
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save vehicle');
+      setError(e instanceof Error ? friendlyError(e.message) : 'Failed to save vehicle');
       return false;
     }
   }, [userCode]);
@@ -229,7 +229,7 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
       ));
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save fill-up');
+      setError(e instanceof Error ? friendlyError(e.message) : 'Failed to save fill-up');
       return false;
     }
   }, [userCode, activeVehicleId]);

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, FlatList, Alert,
+  View, Text, StyleSheet, Pressable, FlatList, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,7 +10,8 @@ import { computeStats, fmt, fmtDate } from '../lib/fuel-utils';
 import { currencyByCode } from '../lib/currencies';
 import { LineChart } from '../components/LineChart';
 import { StatTile } from '../components/ui';
-import { colors } from '../theme';
+import { DashboardSkeleton } from '../components/Skeleton';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
@@ -19,6 +20,8 @@ type ChartMode = 'kmpl' | 'l100km' | 'spend';
 export default function DashboardScreen({ navigation }: Props) {
   const { vehicles, activeVehicleId, setActiveVehicleId, fills, currencyCode, removeFill, dataLoading } = useGarage();
   const { isPro } = useEntitlement();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [chartMode, setChartMode] = useState<ChartMode>('kmpl');
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
 
@@ -71,7 +74,7 @@ export default function DashboardScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.header}>
         <Pressable style={styles.vehicleSwitcher} onPress={() => setShowVehiclePicker((s) => !s)}>
           <Text style={styles.vehicleName}>
@@ -110,58 +113,60 @@ export default function DashboardScreen({ navigation }: Props) {
         </View>
       )}
 
-      <FlatList
-        data={fillStats.slice().reverse()}
-        keyExtractor={(s) => s.fill.id}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <>
-            <View style={styles.statsGrid}>
-              <StatTile label="Avg km/L" value={avgKmpl ? fmt(avgKmpl, 1) : '—'} />
-              <StatTile label="Avg L/100km" value={avgL100 ? fmt(avgL100, 1) : '—'} />
-              <StatTile label="Total Spend" value={`${currency.symbol}${fmt(totalSpend)}`} />
-              <StatTile label="Cost / km" value={avgCostKm ? `${currency.symbol}${fmt(avgCostKm, 3)}` : '—'} />
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.chartTabs}>
-                {(Object.keys(chartConfig) as ChartMode[]).map((mode) => (
-                  <Pressable key={mode} onPress={() => setChartMode(mode)} style={styles.chartTab}>
-                    <Text style={[styles.chartTabText, chartMode === mode && { color: colors.text }]}>
-                      {chartConfig[mode].label}
-                    </Text>
-                  </Pressable>
-                ))}
+      {dataLoading ? (
+        <DashboardSkeleton showHeader={false} />
+      ) : (
+        <FlatList
+          data={fillStats.slice().reverse()}
+          keyExtractor={(s) => s.fill.id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <>
+              <View style={styles.statsGrid}>
+                <StatTile label="Avg km/L" value={avgKmpl ? fmt(avgKmpl, 1) : '—'} />
+                <StatTile label="Avg L/100km" value={avgL100 ? fmt(avgL100, 1) : '—'} />
+                <StatTile label="Total Spend" value={`${currency.symbol}${fmt(totalSpend)}`} />
+                <StatTile label="Cost / km" value={avgCostKm ? `${currency.symbol}${fmt(avgCostKm, 3)}` : '—'} />
               </View>
-              <LineChart points={activeChart.points} color={activeChart.color} yLabel={activeChart.label} emptyHint={activeChart.hint} />
-            </View>
 
-            <Text style={styles.sectionTitle}>Fill History</Text>
-          </>
-        }
-        renderItem={({ item }) => (
-          <Pressable onLongPress={() => confirmDeleteFill(item.fill.id)} style={styles.fillRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.fillDate}>{fmtDate(item.fill.fill_date)}</Text>
-              <Text style={styles.fillMeta}>
-                {item.fill.odometer.toLocaleString()} km · {fmt(item.fill.litres)} L
-                {item.fill.is_partial ? ' · partial' : ''}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.fillCost}>{currency.symbol}{fmt(item.totalCost)}</Text>
-              {item.kmpl ? <Text style={styles.fillEff}>{fmt(item.kmpl, 1)} km/L</Text> : null}
-            </View>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          !dataLoading ? (
+              <View style={styles.card}>
+                <View style={styles.chartTabs}>
+                  {(Object.keys(chartConfig) as ChartMode[]).map((mode) => (
+                    <Pressable key={mode} onPress={() => setChartMode(mode)} style={styles.chartTab}>
+                      <Text style={[styles.chartTabText, chartMode === mode && { color: colors.text }]}>
+                        {chartConfig[mode].label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <LineChart points={activeChart.points} color={activeChart.color} yLabel={activeChart.label} emptyHint={activeChart.hint} />
+              </View>
+
+              <Text style={styles.sectionTitle}>Fill History</Text>
+            </>
+          }
+          renderItem={({ item }) => (
+            <Pressable onLongPress={() => confirmDeleteFill(item.fill.id)} style={styles.fillRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fillDate}>{fmtDate(item.fill.fill_date)}</Text>
+                <Text style={styles.fillMeta}>
+                  {item.fill.odometer.toLocaleString()} km · {fmt(item.fill.litres)} L
+                  {item.fill.is_partial ? ' · partial' : ''}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.fillCost}>{currency.symbol}{fmt(item.totalCost)}</Text>
+                {item.kmpl ? <Text style={styles.fillEff}>{fmt(item.kmpl, 1)} km/L</Text> : null}
+              </View>
+            </Pressable>
+          )}
+          ListEmptyComponent={
             <View style={styles.center}>
               <Text style={styles.emptyText}>No fill-ups logged yet.</Text>
             </View>
-          ) : null
-        }
-      />
+          }
+        />
+      )}
 
       <Pressable style={styles.fab} onPress={() => navigation.navigate('AddFill')}>
         <Text style={styles.fabText}>+</Text>
@@ -170,43 +175,45 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40 },
-  emptyText: { color: colors.faint, fontSize: 13 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  vehicleSwitcher: { flex: 1 },
-  vehicleName: { fontSize: 18, fontWeight: '800', color: colors.text },
-  vehicleSub: { fontSize: 12, color: colors.faint, marginTop: 2 },
-  headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 190 },
-  iconBtn: { paddingVertical: 6, paddingHorizontal: 8, borderWidth: 1, borderColor: colors.border },
-  iconBtnText: { fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase' },
-  vehiclePicker: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
-  vehiclePickerRow: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border },
-  vehiclePickerText: { color: colors.text, fontSize: 14 },
-  listContent: { padding: 16, paddingBottom: 100 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 20 },
-  chartTabs: { flexDirection: 'row', gap: 16, marginBottom: 8 },
-  chartTab: { paddingVertical: 4 },
-  chartTabText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.faint },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.faint, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 },
-  fillRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  fillDate: { fontSize: 14, color: colors.text, fontWeight: '600' },
-  fillMeta: { fontSize: 12, color: colors.faint, marginTop: 2 },
-  fillCost: { fontSize: 14, color: colors.text, fontWeight: '700' },
-  fillEff: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  fab: {
-    position: 'absolute', right: 20, bottom: 24,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
-  },
-  fabText: { fontSize: 28, color: '#0b0f19', fontWeight: '700', marginTop: -2 },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40 },
+    emptyText: { color: colors.faint, fontSize: 13 },
+    header: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+      padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    vehicleSwitcher: { flex: 1 },
+    vehicleName: { fontSize: 18, fontWeight: '800', color: colors.text },
+    vehicleSub: { fontSize: 12, color: colors.faint, marginTop: 2 },
+    headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 190 },
+    iconBtn: { paddingVertical: 6, paddingHorizontal: 8, borderWidth: 1, borderColor: colors.border },
+    iconBtnText: { fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase' },
+    vehiclePicker: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
+    vehiclePickerRow: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border },
+    vehiclePickerText: { color: colors.text, fontSize: 14 },
+    listContent: { padding: 16, paddingBottom: 100 },
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+    card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 20 },
+    chartTabs: { flexDirection: 'row', gap: 16, marginBottom: 8 },
+    chartTab: { paddingVertical: 4 },
+    chartTabText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.faint },
+    sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.faint, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 },
+    fillRow: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    fillDate: { fontSize: 14, color: colors.text, fontWeight: '600' },
+    fillMeta: { fontSize: 12, color: colors.faint, marginTop: 2 },
+    fillCost: { fontSize: 14, color: colors.text, fontWeight: '700' },
+    fillEff: { fontSize: 11, color: colors.muted, marginTop: 2 },
+    fab: {
+      position: 'absolute', right: 20, bottom: 24,
+      width: 56, height: 56, borderRadius: 28,
+      backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+      shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+    },
+    fabText: { fontSize: 28, color: '#0b0f19', fontWeight: '700', marginTop: -2 },
+  });
+}

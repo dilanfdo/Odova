@@ -13,7 +13,7 @@ export default function App() {
         <EntitlementProvider>
           <GarageProvider>
             <RootNavigator />
-            <StatusBar style="light" />
+            <StatusBar style="auto" />
           </GarageProvider>
         </EntitlementProvider>
       </AccountProvider>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -10,7 +10,7 @@ import * as api from '../lib/api';
 import { CURRENCIES } from '../lib/currencies';
 import { computeStats, fmt } from '../lib/fuel-utils';
 import { Button, Field } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -20,6 +20,8 @@ export default function SettingsScreen({ navigation }: Props) {
   const { userCode, currencyCode, changeCurrency, deleteAllData, restoreFromAccount, fills, vehicles, activeVehicleId } = useGarage();
   const { isPro, devClearPro, purchasePro } = useEntitlement();
   const { session, sendMagicLink, signOut } = useAccount();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [copied, setCopied] = useState(false);
 
   const [email, setEmail] = useState('');
@@ -283,33 +285,35 @@ export default function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20 },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
-    color: colors.faint, marginBottom: 8, marginTop: 18,
-  },
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 14 },
-  planStatusPro: { fontSize: 16, fontWeight: '800', color: colors.green },
-  planStatusFree: { fontSize: 16, fontWeight: '800', color: colors.text },
-  upgradeBtn: { marginTop: 12, backgroundColor: colors.accent, paddingVertical: 10, alignItems: 'center' },
-  upgradeBtnText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: '#0b0f19' },
-  devToggle: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSoft },
-  devToggleText: { fontSize: 11, color: colors.faint, fontWeight: '600' },
-  code: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
-  hint: { fontSize: 12, color: colors.faint, marginTop: 8, lineHeight: 17 },
-  copyBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.amber, paddingVertical: 8, alignItems: 'center' },
-  copyBtnText: { color: colors.amber, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
-  chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-  chipText: { fontSize: 13, color: colors.muted },
-  chipTextActive: { color: colors.text, fontWeight: '700' },
-  close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
-  errorText: { color: colors.red, fontSize: 12, marginBottom: 8 },
-  dangerLink: { marginTop: 12 },
-  dangerLinkText: { color: colors.red, fontSize: 12, fontWeight: '700' },
-  restoreLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: 20 },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
+    sectionLabel: {
+      fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
+      color: colors.faint, marginBottom: 8, marginTop: 18,
+    },
+    card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 14 },
+    planStatusPro: { fontSize: 16, fontWeight: '800', color: colors.green },
+    planStatusFree: { fontSize: 16, fontWeight: '800', color: colors.text },
+    upgradeBtn: { marginTop: 12, backgroundColor: colors.accent, paddingVertical: 10, alignItems: 'center' },
+    upgradeBtnText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: '#0b0f19' },
+    devToggle: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSoft },
+    devToggleText: { fontSize: 11, color: colors.faint, fontWeight: '600' },
+    code: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
+    hint: { fontSize: 12, color: colors.faint, marginTop: 8, lineHeight: 17 },
+    copyBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.amber, paddingVertical: 8, alignItems: 'center' },
+    copyBtnText: { color: colors.amber, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
+    chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
+    chipText: { fontSize: 13, color: colors.muted },
+    chipTextActive: { color: colors.text, fontWeight: '700' },
+    close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
+    errorText: { color: colors.red, fontSize: 12, marginBottom: 8 },
+    dangerLink: { marginTop: 12 },
+    dangerLinkText: { color: colors.red, fontSize: 12, fontWeight: '700' },
+    restoreLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  });
+}

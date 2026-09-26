@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useGarage } from '../context/GarageContext';
 import { Field, Button } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 
 export default function OnboardingScreen() {
   const { startNewGarage, useExistingCode, error } = useGarage();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [nickname, setNickname] = useState('');
   const [code, setCode] = useState('');
@@ -28,7 +30,7 @@ export default function OnboardingScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Text style={styles.title}>Odova</Text>
       <Text style={styles.subtitle}>
@@ -80,16 +82,18 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: '800', color: colors.text, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: colors.muted, marginBottom: 28, lineHeight: 20 },
-  tabs: { flexDirection: 'row', marginBottom: 20, gap: 8 },
-  tab: {
-    flex: 1, textAlign: 'center', paddingVertical: 10,
-    fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',
-    color: colors.faint, borderWidth: 1, borderColor: colors.border,
-  },
-  tabActive: { color: colors.text, borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.08)' },
-  error: { color: colors.red, fontSize: 13, marginTop: 16 },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center' },
+    title: { fontSize: 28, fontWeight: '800', color: colors.text, marginBottom: 8 },
+    subtitle: { fontSize: 14, color: colors.muted, marginBottom: 28, lineHeight: 20 },
+    tabs: { flexDirection: 'row', marginBottom: 20, gap: 8 },
+    tab: {
+      flex: 1, textAlign: 'center', paddingVertical: 10,
+      fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',
+      color: colors.faint, borderWidth: 1, borderColor: colors.border,
+    },
+    tabActive: { color: colors.text, borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.08)' },
+    error: { color: colors.red, fontSize: 13, marginTop: 16 },
+  });
+}

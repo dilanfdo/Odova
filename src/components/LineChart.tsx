@@ -1,10 +1,10 @@
 // Ported from FuelTrackerClient.tsx's inline <svg> LineChart — same path math,
 // react-native-svg primitives instead of DOM SVG elements.
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Line, Path, Circle, Text as SvgText } from 'react-native-svg';
 import { fmt } from '../lib/fuel-utils';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 
 export function LineChart({
   points,
@@ -17,6 +17,8 @@ export function LineChart({
   yLabel: string;
   emptyHint: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   points = points.filter((p) => Number.isFinite(p.y));
 
   if (points.length < 2) {
@@ -60,7 +62,7 @@ export function LineChart({
           <React.Fragment key={i}>
             <Line
               x1={PAD.l} y1={scaleY(y)} x2={W - PAD.r} y2={scaleY(y)}
-              stroke="rgba(255,255,255,0.08)" strokeWidth={1}
+              stroke={colors.borderSoft} strokeWidth={1}
             />
             <SvgText x={PAD.l - 6} y={scaleY(y) + 4} textAnchor="end" fontSize={10} fill={colors.faint}>
               {fmt(y, 1)}
@@ -96,21 +98,23 @@ export function LineChart({
   );
 }
 
-const styles = StyleSheet.create({
-  empty: {
-    height: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  emptyTitle: {
-    fontSize: 13,
-    color: colors.faint,
-  },
-  emptyHint: {
-    fontSize: 11,
-    color: colors.faint,
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    empty: {
+      height: 180,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    emptyTitle: {
+      fontSize: 13,
+      color: colors.faint,
+    },
+    emptyHint: {
+      fontSize: 11,
+      color: colors.faint,
+      textAlign: 'center',
+      paddingHorizontal: 24,
+    },
+  });
+}

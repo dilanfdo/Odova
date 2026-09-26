@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -6,7 +6,7 @@ import { useGarage } from '../context/GarageContext';
 import { addReminder, type DueType } from '../lib/reminders';
 import { scheduleDueDateNotification } from '../lib/notifications';
 import { Field, Button } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
@@ -15,6 +15,8 @@ const PRESETS = ['Oil change', 'Tyre rotation', 'Brake inspection', 'Insurance r
 
 export default function AddReminderScreen({ navigation }: Props) {
   const { activeVehicleId } = useGarage();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [dueType, setDueType] = useState<DueType>('date');
   const [dueDate, setDueDate] = useState('');
@@ -112,21 +114,23 @@ export default function AddReminderScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20 },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 16 },
-  fieldGroup: { marginBottom: 14, gap: 8 },
-  label: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
-    textTransform: 'uppercase', color: colors.faint,
-  },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  chip: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border },
-  chipText: { fontSize: 12, color: colors.muted },
-  typeChip: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border },
-  typeChipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-  typeChipTextActive: { color: colors.text, fontWeight: '700' },
-  error: { color: colors.red, fontSize: 13, marginBottom: 12 },
-  cancel: { fontSize: 13, color: colors.faint },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: 20 },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 16 },
+    fieldGroup: { marginBottom: 14, gap: 8 },
+    label: {
+      fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
+      textTransform: 'uppercase', color: colors.faint,
+    },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+    chip: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border },
+    chipText: { fontSize: 12, color: colors.muted },
+    typeChip: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border },
+    typeChipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
+    typeChipTextActive: { color: colors.text, fontWeight: '700' },
+    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
+    cancel: { fontSize: 13, color: colors.faint },
+  });
+}

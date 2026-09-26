@@ -3,10 +3,10 @@
 // paywall. This is deliberate — hiding Pro features entirely means free users
 // never discover them. Wrap real, interactive feature UI in `preview` too
 // (dimmed automatically) so the preview never drifts out of sync with reality.
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useEntitlement } from '../context/EntitlementContext';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 
 export function ProGate({
   children,
@@ -20,6 +20,8 @@ export function ProGate({
   onUnlockPress: () => void;
 }) {
   const { isPro } = useEntitlement();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (isPro) return <>{children}</>;
 
@@ -42,21 +44,23 @@ export function ProGate({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1 },
-  preview: { opacity: 0.35 },
-  overlay: {
-    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center', padding: 32,
-    backgroundColor: 'rgba(11,15,25,0.55)',
-  },
-  badge: {
-    backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10,
-    marginBottom: 14,
-  },
-  badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
-  title: { fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', marginBottom: 8 },
-  description: { fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-  button: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 24 },
-  buttonText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: '#0b0f19' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    wrap: { flex: 1 },
+    preview: { opacity: 0.35 },
+    overlay: {
+      position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+      alignItems: 'center', justifyContent: 'center', padding: 32,
+      backgroundColor: 'rgba(11,15,25,0.55)',
+    },
+    badge: {
+      backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10,
+      marginBottom: 14,
+    },
+    badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
+    title: { fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', marginBottom: 8 },
+    description: { fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
+    button: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 24 },
+    buttonText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: '#0b0f19' },
+  });
+}

@@ -1,6 +1,6 @@
-import React from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import React, { useMemo } from 'react';
+import { View, StyleSheet, useColorScheme } from 'react-native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -12,7 +12,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import MaintenanceScreen from '../screens/MaintenanceScreen';
 import AddReminderScreen from '../screens/AddReminderScreen';
 import PaywallScreen from '../screens/PaywallScreen';
-import { colors } from '../theme';
+import { DashboardSkeleton } from '../components/Skeleton';
+import { useColors, type ThemeColors } from '../theme';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -28,18 +29,23 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const navTheme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, text: colors.text, primary: colors.accent },
-};
-
 export default function RootNavigator() {
   const { step } = useGarage();
+  const colors = useColors();
+  const scheme = useColorScheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navTheme = useMemo(() => {
+    const base = scheme === 'light' ? DefaultTheme : DarkTheme;
+    return {
+      ...base,
+      colors: { ...base.colors, background: colors.bg, card: colors.surface, border: colors.border, text: colors.text, primary: colors.accent },
+    };
+  }, [colors, scheme]);
 
   if (step === 'loading') {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color={colors.accent} size="large" />
+        <DashboardSkeleton />
       </View>
     );
   }
@@ -69,6 +75,8 @@ export default function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    loading: { flex: 1, backgroundColor: colors.bg },
+  });
+}

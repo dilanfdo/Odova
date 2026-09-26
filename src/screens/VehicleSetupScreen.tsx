@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGarage } from '../context/GarageContext';
 import { Field, Button } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import { FUEL_TYPES } from '../lib/types';
 
 export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void } = {}) {
   const { addVehicle, error, vehicles } = useGarage();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
@@ -65,23 +67,25 @@ export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void }
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20 },
-  title: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 6 },
-  subtitle: { fontSize: 13, color: colors.muted, marginBottom: 20 },
-  fieldGroup: { marginBottom: 14, gap: 8 },
-  label: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
-    textTransform: 'uppercase', color: colors.faint,
-  },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-  chipText: { fontSize: 13, color: colors.muted },
-  chipTextActive: { color: colors.text, fontWeight: '700' },
-  error: { color: colors.red, fontSize: 13, marginBottom: 12 },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: 20 },
+    title: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 6 },
+    subtitle: { fontSize: 13, color: colors.muted, marginBottom: 20 },
+    fieldGroup: { marginBottom: 14, gap: 8 },
+    label: {
+      fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
+      textTransform: 'uppercase', color: colors.faint,
+    },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: {
+      paddingVertical: 8, paddingHorizontal: 12,
+      borderWidth: 1, borderColor: colors.border,
+    },
+    chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
+    chipText: { fontSize: 13, color: colors.muted },
+    chipTextActive: { color: colors.text, fontWeight: '700' },
+    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
+  });
+}

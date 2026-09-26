@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,7 +8,7 @@ import { ProGate } from '../components/ProGate';
 import { getReminders, deleteReminder, completeReminder, reminderStatus, type Reminder } from '../lib/reminders';
 import { cancelNotification } from '../lib/notifications';
 import { fmtDate, computeStats } from '../lib/fuel-utils';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Maintenance'>;
@@ -16,9 +16,13 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Maintenance'>;
 const STATUS_LABEL: Record<string, string> = {
   overdue: 'Overdue', upcoming: 'Due soon', ok: 'Scheduled', done: 'Done',
 };
-const STATUS_COLOR: Record<string, string> = {
-  overdue: colors.red, upcoming: colors.amber, ok: colors.muted, done: colors.green,
-};
+
+function statusColor(colors: ThemeColors, status: string): string {
+  const map: Record<string, string> = {
+    overdue: colors.red, upcoming: colors.amber, ok: colors.muted, done: colors.green,
+  };
+  return map[status];
+}
 
 function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
   reminder: Reminder;
@@ -26,6 +30,8 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
   onComplete: () => void;
   onDelete: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const status = reminderStatus(reminder, currentOdometer);
   return (
     <Pressable onLongPress={onDelete} style={styles.row}>
@@ -38,7 +44,7 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 6 }}>
-        <Text style={[styles.statusBadge, { color: STATUS_COLOR[status] }]}>{STATUS_LABEL[status]}</Text>
+        <Text style={[styles.statusBadge, { color: statusColor(colors, status) }]}>{STATUS_LABEL[status]}</Text>
         {status !== 'done' && (
           <Pressable onPress={onComplete}>
             <Text style={styles.completeLink}>Mark done</Text>
@@ -51,6 +57,8 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
 
 function MaintenanceList({ navigation }: Props) {
   const { activeVehicleId, fills } = useGarage();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   const load = useCallback(() => {
@@ -134,26 +142,28 @@ export default function MaintenanceScreen(props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text },
-  addBtn: { borderWidth: 1, borderColor: colors.accent, paddingVertical: 6, paddingHorizontal: 10 },
-  addBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase' },
-  listContent: { padding: 16, flexGrow: 1 },
-  row: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  rowTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  rowMeta: { fontSize: 12, color: colors.faint, marginTop: 2 },
-  statusBadge: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
-  completeLink: { fontSize: 11, color: colors.accent, fontWeight: '700' },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 8, paddingHorizontal: 32 },
-  emptyText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
-  emptyHint: { color: colors.faint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
-  close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    header: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text },
+    addBtn: { borderWidth: 1, borderColor: colors.accent, paddingVertical: 6, paddingHorizontal: 10 },
+    addBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase' },
+    listContent: { padding: 16, flexGrow: 1 },
+    row: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    rowTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+    rowMeta: { fontSize: 12, color: colors.faint, marginTop: 2 },
+    statusBadge: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+    completeLink: { fontSize: 11, color: colors.accent, fontWeight: '700' },
+    empty: { alignItems: 'center', paddingTop: 60, gap: 8, paddingHorizontal: 32 },
+    emptyText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+    emptyHint: { color: colors.faint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+    close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
+  });
+}

@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { computeStats } from '../lib/fuel-utils';
 import { Field, Button } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddFill'>;
 
 export default function AddFillScreen({ navigation }: Props) {
   const { addFill, fills, error } = useGarage();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [fillDate, setFillDate] = useState(new Date().toISOString().slice(0, 10));
   const [odometer, setOdometer] = useState('');
   const [litres, setLitres] = useState('');
@@ -89,15 +91,17 @@ export default function AddFillScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20 },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
-  switchRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 14, gap: 12,
-  },
-  switchLabel: { flex: 1, fontSize: 13, color: colors.muted },
-  error: { color: colors.red, fontSize: 13, marginBottom: 12 },
-  cancel: { color: colors.faint, fontSize: 13, fontWeight: '600' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: 20 },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
+    switchRow: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      marginBottom: 14, gap: 12,
+    },
+    switchLabel: { flex: 1, fontSize: 13, color: colors.muted },
+    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
+    cancel: { color: colors.faint, fontSize: 13, fontWeight: '600' },
+  });
+}

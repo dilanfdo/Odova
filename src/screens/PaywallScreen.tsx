@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEntitlement } from '../context/EntitlementContext';
 import { PRO_PRICE_DISPLAY } from '../lib/entitlements';
 import { Button } from '../components/ui';
-import { colors } from '../theme';
+import { useColors, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
@@ -20,6 +20,8 @@ const BENEFITS = [
 
 export default function PaywallScreen({ navigation }: Props) {
   const { purchasePro, restorePurchases } = useEntitlement();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [busy, setBusy] = useState(false);
 
   async function handlePurchase() {
@@ -91,18 +93,20 @@ export default function PaywallScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 24, paddingTop: 32 },
-  badge: { alignSelf: 'flex-start', backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 16 },
-  badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
-  title: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 8, lineHeight: 32 },
-  subtitle: { fontSize: 13, color: colors.muted, marginBottom: 28 },
-  benefits: { gap: 18, marginBottom: 28 },
-  benefitRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  checkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent, marginTop: 6 },
-  benefitTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  benefitDesc: { fontSize: 12.5, color: colors.faint, marginTop: 2, lineHeight: 17 },
-  restore: { fontSize: 13, fontWeight: '700', color: colors.accent },
-  cancel: { fontSize: 13, color: colors.faint },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: 24, paddingTop: 32 },
+    badge: { alignSelf: 'flex-start', backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 16 },
+    badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
+    title: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 8, lineHeight: 32 },
+    subtitle: { fontSize: 13, color: colors.muted, marginBottom: 28 },
+    benefits: { gap: 18, marginBottom: 28 },
+    benefitRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+    checkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent, marginTop: 6 },
+    benefitTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+    benefitDesc: { fontSize: 12.5, color: colors.faint, marginTop: 2, lineHeight: 17 },
+    restore: { fontSize: 13, fontWeight: '700', color: colors.accent },
+    cancel: { fontSize: 13, color: colors.faint },
+  });
+}

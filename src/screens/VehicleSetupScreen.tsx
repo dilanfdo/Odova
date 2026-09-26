@@ -1,15 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGarage } from '../context/GarageContext';
-import { Field, Button } from '../components/ui';
-import { useColors, type ThemeColors } from '../theme';
+import { Field, Button, ScreenHeader, ErrorText, ChipGroup } from '../components/ui';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import { FUEL_TYPES } from '../lib/types';
 
-export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void } = {}) {
+export default function VehicleSetupScreen({ onSaved, onClose }: { onSaved?: () => void; onClose?: () => void } = {}) {
   const { addVehicle, error, vehicles } = useGarage();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { styles } = useThemedStyles(makeStyles);
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
@@ -32,6 +31,7 @@ export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void }
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+    {onClose && <ScreenHeader onClose={onClose} />}
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>
         {vehicles.length === 0 ? 'Add your first vehicle' : 'Add a vehicle'}
@@ -44,22 +44,16 @@ export default function VehicleSetupScreen({ onSaved }: { onSaved?: () => void }
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Fuel type</Text>
-        <View style={styles.chipRow}>
-          {FUEL_TYPES.map((t) => (
-            <Pressable
-              key={t}
-              onPress={() => setFuelType(t)}
-              style={[styles.chip, fuelType === t && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, fuelType === t && styles.chipTextActive]}>{t}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <ChipGroup
+          options={FUEL_TYPES.map((t) => ({ value: t, label: t }))}
+          value={fuelType}
+          onChange={setFuelType}
+        />
       </View>
 
       <Field label="Nickname (optional)" placeholder="Daily driver" value={nickname} onChangeText={setNickname} />
 
-      {(localError || error) ? <Text style={styles.error}>{localError || error}</Text> : null}
+      <ErrorText>{localError || error}</ErrorText>
 
       <Button title="Save Vehicle" variant="fill" onPress={handleSave} loading={busy} style={{ marginTop: 8 }} />
     </ScrollView>
@@ -78,14 +72,5 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
       textTransform: 'uppercase', color: colors.faint,
     },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: {
-      paddingVertical: 8, paddingHorizontal: 12,
-      borderWidth: 1, borderColor: colors.border,
-    },
-    chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-    chipText: { fontSize: 13, color: colors.muted },
-    chipTextActive: { color: colors.text, fontWeight: '700' },
-    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
   });
 }

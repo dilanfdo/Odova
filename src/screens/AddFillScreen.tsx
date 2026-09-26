@@ -1,19 +1,18 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { computeStats } from '../lib/fuel-utils';
-import { Field, Button } from '../components/ui';
-import { useColors, type ThemeColors } from '../theme';
+import { Field, Button, ScreenHeader, ErrorText } from '../components/ui';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddFill'>;
 
 export default function AddFillScreen({ navigation }: Props) {
   const { addFill, fills, error } = useGarage();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { styles } = useThemedStyles(makeStyles);
   const [fillDate, setFillDate] = useState(new Date().toISOString().slice(0, 10));
   const [odometer, setOdometer] = useState('');
   const [litres, setLitres] = useState('');
@@ -65,9 +64,8 @@ export default function AddFillScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+    <ScreenHeader title="Log a Fill-up" onClose={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Log a Fill-up</Text>
-
       <Field label="Date (YYYY-MM-DD)" value={fillDate} onChangeText={setFillDate} />
       <Field label="Odometer (km)" value={odometer} onChangeText={setOdometer} keyboardType="decimal-pad" />
       <Field label="Litres" value={litres} onChangeText={setLitres} keyboardType="decimal-pad" />
@@ -80,12 +78,9 @@ export default function AddFillScreen({ navigation }: Props) {
 
       <Field label="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
 
-      {(localError || error) ? <Text style={styles.error}>{localError || error}</Text> : null}
+      <ErrorText>{localError || error}</ErrorText>
 
       <Button title="Save Fill-up" variant="fill" onPress={handleSave} loading={busy} />
-      <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, alignItems: 'center' }}>
-        <Text style={styles.cancel}>Cancel</Text>
-      </Pressable>
     </ScrollView>
     </SafeAreaView>
   );
@@ -94,14 +89,11 @@ export default function AddFillScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 20 },
-    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
+    content: { padding: 20, paddingTop: 4 },
     switchRow: {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
       marginBottom: 14, gap: 12,
     },
     switchLabel: { flex: 1, fontSize: 13, color: colors.muted },
-    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
-    cancel: { color: colors.faint, fontSize: 13, fontWeight: '600' },
   });
 }

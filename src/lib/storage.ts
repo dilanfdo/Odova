@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CODE_KEY = 'ndl_fuel_code';
 const CURRENCY_KEY = 'ndl_fuel_currency';
+const THEME_MODE_KEY = 'odova_theme_mode';
 
 export async function getStoredCode(): Promise<string | null> {
   return AsyncStorage.getItem(CODE_KEY);
@@ -23,4 +24,12 @@ export async function getStoredCurrency(): Promise<string | null> {
 
 export async function setStoredCurrency(code: string): Promise<void> {
   await AsyncStorage.setItem(CURRENCY_KEY, code);
+}
+
+export async function getStoredThemeMode(): Promise<string | null> {
+  return AsyncStorage.getItem(THEME_MODE_KEY);
+}
+
+export async function setStoredThemeMode(mode: string): Promise<void> {
+  await AsyncStorage.setItem(THEME_MODE_KEY, mode);
 }

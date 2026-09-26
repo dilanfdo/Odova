@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -9,19 +9,25 @@ import { useAccount } from '../context/AccountContext';
 import * as api from '../lib/api';
 import { CURRENCIES } from '../lib/currencies';
 import { computeStats, fmt } from '../lib/fuel-utils';
-import { Button, Field } from '../components/ui';
-import { useColors, type ThemeColors } from '../theme';
+import { Button, Field, ConsentNote, ScreenHeader, ErrorText, SegmentedControl, ChipGroup, Card } from '../components/ui';
+import { useThemedStyles, useThemeMode, type ThemeColors, type ThemeMode } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 type ClaimUiState = 'idle' | 'loading' | 'unclaimed' | 'owned' | 'claimed_other' | 'error';
 
+const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+];
+
 export default function SettingsScreen({ navigation }: Props) {
   const { userCode, currencyCode, changeCurrency, deleteAllData, restoreFromAccount, fills, vehicles, activeVehicleId } = useGarage();
   const { isPro, devClearPro, purchasePro } = useEntitlement();
   const { session, sendMagicLink, signOut } = useAccount();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { mode, setMode } = useThemeMode();
+  const { colors, styles } = useThemedStyles(makeStyles);
   const [copied, setCopied] = useState(false);
 
   const [email, setEmail] = useState('');
@@ -152,11 +158,13 @@ export default function SettingsScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+    <ScreenHeader title="Settings" onClose={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.sectionLabel}>Appearance</Text>
+      <SegmentedControl options={THEME_OPTIONS} value={mode} onChange={setMode} />
 
       <Text style={styles.sectionLabel}>Plan</Text>
-      <View style={styles.card}>
+      <Card style={styles.card}>
         {isPro ? (
           <>
             <Text style={styles.planStatusPro}>✓ Odova Pro</Text>
@@ -181,10 +189,10 @@ export default function SettingsScreen({ navigation }: Props) {
             </Text>
           </Pressable>
         )}
-      </View>
+      </Card>
 
       <Text style={styles.sectionLabel}>Sync Code</Text>
-      <View style={styles.card}>
+      <Card style={styles.card}>
         <Text style={styles.code}>{userCode ?? '—'}</Text>
         <Text style={styles.hint}>
           Save this code to load your garage on another device — no account needed.
@@ -192,10 +200,10 @@ export default function SettingsScreen({ navigation }: Props) {
         <Pressable onPress={copyCode} style={styles.copyBtn}>
           <Text style={styles.copyBtnText}>{copied ? 'Copied!' : 'Copy Code'}</Text>
         </Pressable>
-      </View>
+      </Card>
 
       <Text style={styles.sectionLabel}>Account</Text>
-      <View style={styles.card}>
+      <Card style={styles.card}>
         {!session ? (
           magicLinkSent ? (
             <Text style={styles.hint}>
@@ -217,7 +225,8 @@ export default function SettingsScreen({ navigation }: Props) {
                   keyboardType="email-address"
                 />
               </View>
-              {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+              <ConsentNote />
+              <ErrorText>{authError}</ErrorText>
               <Button title="Send Magic Link" onPress={handleSendMagicLink} loading={authBusy} />
             </>
           )
@@ -256,30 +265,18 @@ export default function SettingsScreen({ navigation }: Props) {
             </Pressable>
           </>
         )}
-      </View>
+      </Card>
 
       <Text style={styles.sectionLabel}>Currency</Text>
-      <View style={styles.chipRow}>
-        {CURRENCIES.map((c) => (
-          <Pressable
-            key={c.code}
-            onPress={() => changeCurrency(c.code)}
-            style={[styles.chip, currencyCode === c.code && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, currencyCode === c.code && styles.chipTextActive]}>
-              {c.symbol} {c.code}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <ChipGroup
+        options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.symbol} ${c.code}` }))}
+        value={currencyCode}
+        onChange={changeCurrency}
+      />
 
       <Text style={styles.sectionLabel}>Data</Text>
       <Button title={isPro ? 'Export CSV' : 'Export CSV 🔒 Pro'} onPress={exportCSV} style={{ marginBottom: 10 }} />
       <Button title="Delete All Garage Data" variant="danger" onPress={confirmDeleteAll} />
-
-      <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 24, alignItems: 'center' }}>
-        <Text style={styles.close}>Close</Text>
-      </Pressable>
     </ScrollView>
     </SafeAreaView>
   );
@@ -288,30 +285,22 @@ export default function SettingsScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 20 },
-    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 20 },
+    content: { padding: 20, paddingTop: 12 },
     sectionLabel: {
       fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
       color: colors.faint, marginBottom: 8, marginTop: 18,
     },
-    card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 14 },
+    card: { padding: 14 },
     planStatusPro: { fontSize: 16, fontWeight: '800', color: colors.green },
     planStatusFree: { fontSize: 16, fontWeight: '800', color: colors.text },
     upgradeBtn: { marginTop: 12, backgroundColor: colors.accent, paddingVertical: 10, alignItems: 'center' },
-    upgradeBtnText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: '#0b0f19' },
+    upgradeBtnText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: colors.onAccent },
     devToggle: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSoft },
     devToggleText: { fontSize: 11, color: colors.faint, fontWeight: '600' },
     code: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
     hint: { fontSize: 12, color: colors.faint, marginTop: 8, lineHeight: 17 },
     copyBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.amber, paddingVertical: 8, alignItems: 'center' },
     copyBtnText: { color: colors.amber, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
-    chipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-    chipText: { fontSize: 13, color: colors.muted },
-    chipTextActive: { color: colors.text, fontWeight: '700' },
-    close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
-    errorText: { color: colors.red, fontSize: 12, marginBottom: 8 },
     dangerLink: { marginTop: 12 },
     dangerLinkText: { color: colors.red, fontSize: 12, fontWeight: '700' },
     restoreLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },

@@ -51,7 +51,7 @@ function makeStyles(colors: ThemeColors) {
     overlay: {
       position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
       alignItems: 'center', justifyContent: 'center', padding: 32,
-      backgroundColor: 'rgba(11,15,25,0.55)',
+      backgroundColor: colors.scrim,
     },
     badge: {
       backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10,
@@ -61,6 +61,6 @@ function makeStyles(colors: ThemeColors) {
     title: { fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', marginBottom: 8 },
     description: { fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
     button: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 24 },
-    buttonText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: '#0b0f19' },
+    buttonText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.onAccent },
   });
 }

@@ -1,14 +1,15 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { ProGate } from '../components/ProGate';
+import { ScreenHeader } from '../components/ui';
 import { getReminders, deleteReminder, completeReminder, reminderStatus, type Reminder } from '../lib/reminders';
 import { cancelNotification } from '../lib/notifications';
 import { fmtDate, computeStats } from '../lib/fuel-utils';
-import { useColors, type ThemeColors } from '../theme';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Maintenance'>;
@@ -30,8 +31,7 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
   onComplete: () => void;
   onDelete: () => void;
 }) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, styles } = useThemedStyles(makeStyles);
   const status = reminderStatus(reminder, currentOdometer);
   return (
     <Pressable onLongPress={onDelete} style={styles.row}>
@@ -57,8 +57,7 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
 
 function MaintenanceList({ navigation }: Props) {
   const { activeVehicleId, fills } = useGarage();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { styles } = useThemedStyles(makeStyles);
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   const load = useCallback(() => {
@@ -97,9 +96,8 @@ function MaintenanceList({ navigation }: Props) {
   });
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Maintenance</Text>
+    <View style={styles.body}>
+      <View style={styles.addRow}>
         <Pressable onPress={() => navigation.navigate('AddReminder')} style={styles.addBtn}>
           <Text style={styles.addBtnText}>+ Reminder</Text>
         </Pressable>
@@ -123,33 +121,32 @@ function MaintenanceList({ navigation }: Props) {
           </View>
         }
       />
-      <Pressable onPress={() => navigation.goBack()} style={{ padding: 16, alignItems: 'center' }}>
-        <Text style={styles.close}>Close</Text>
-      </Pressable>
-    </SafeAreaView>
+    </View>
   );
 }
 
 export default function MaintenanceScreen(props: Props) {
+  const { navigation } = props;
+  const { styles } = useThemedStyles(makeStyles);
   return (
-    <ProGate
-      title="Maintenance Reminders"
-      description="Never miss an oil change, tyre rotation, or insurance renewal — by date or by odometer reading."
-      onUnlockPress={() => props.navigation.navigate('Paywall')}
-    >
-      <MaintenanceList {...props} />
-    </ProGate>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+      <ScreenHeader title="Maintenance" onClose={() => navigation.goBack()} />
+      <ProGate
+        title="Maintenance Reminders"
+        description="Never miss an oil change, tyre rotation, or insurance renewal — by date or by odometer reading."
+        onUnlockPress={() => navigation.navigate('Paywall')}
+      >
+        <MaintenanceList {...props} />
+      </ProGate>
+    </SafeAreaView>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    header: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
-    },
-    title: { fontSize: 20, fontWeight: '800', color: colors.text },
+    body: { flex: 1 },
+    addRow: { alignItems: 'flex-end', padding: 16, paddingBottom: 0 },
     addBtn: { borderWidth: 1, borderColor: colors.accent, paddingVertical: 6, paddingHorizontal: 10 },
     addBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase' },
     listContent: { padding: 16, flexGrow: 1 },
@@ -164,6 +161,5 @@ function makeStyles(colors: ThemeColors) {
     empty: { alignItems: 'center', paddingTop: 60, gap: 8, paddingHorizontal: 32 },
     emptyText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
     emptyHint: { color: colors.faint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
-    close: { color: colors.faint, fontSize: 13, fontWeight: '600' },
   });
 }

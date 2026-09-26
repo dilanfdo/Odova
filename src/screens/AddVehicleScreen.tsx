@@ -7,5 +7,5 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddVehicle'>;
 
 // Reuses the vehicle-setup form as a modal for garages that already have a vehicle.
 export default function AddVehicleScreen({ navigation }: Props) {
-  return <VehicleSetupScreen onSaved={() => navigation.goBack()} />;
+  return <VehicleSetupScreen onSaved={() => navigation.goBack()} onClose={() => navigation.goBack()} />;
 }

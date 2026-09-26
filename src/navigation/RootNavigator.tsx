@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, useColorScheme } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
@@ -13,7 +13,7 @@ import MaintenanceScreen from '../screens/MaintenanceScreen';
 import AddReminderScreen from '../screens/AddReminderScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import { DashboardSkeleton } from '../components/Skeleton';
-import { useColors, type ThemeColors } from '../theme';
+import { useColors, useThemeMode, type ThemeColors } from '../theme';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -32,15 +32,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { step } = useGarage();
   const colors = useColors();
-  const scheme = useColorScheme();
+  const { resolvedScheme } = useThemeMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navTheme = useMemo(() => {
-    const base = scheme === 'light' ? DefaultTheme : DarkTheme;
+    const base = resolvedScheme === 'light' ? DefaultTheme : DarkTheme;
     return {
       ...base,
       colors: { ...base.colors, background: colors.bg, card: colors.surface, border: colors.border, text: colors.text, primary: colors.accent },
     };
-  }, [colors, scheme]);
+  }, [colors, resolvedScheme]);
 
   if (step === 'loading') {
     return (

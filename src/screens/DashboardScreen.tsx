@@ -1,17 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, FlatList, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { useEntitlement } from '../context/EntitlementContext';
 import { computeStats, fmt, fmtDate } from '../lib/fuel-utils';
 import { currencyByCode } from '../lib/currencies';
 import { LineChart } from '../components/LineChart';
-import { StatTile } from '../components/ui';
+import { StatTile, Card } from '../components/ui';
 import { DashboardSkeleton } from '../components/Skeleton';
-import { useColors, type ThemeColors } from '../theme';
+import { AdBanner } from '../components/AdBanner';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
@@ -20,10 +21,11 @@ type ChartMode = 'kmpl' | 'l100km' | 'spend';
 export default function DashboardScreen({ navigation }: Props) {
   const { vehicles, activeVehicleId, setActiveVehicleId, fills, currencyCode, removeFill, dataLoading } = useGarage();
   const { isPro } = useEntitlement();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const { colors, styles } = useThemedStyles(makeStyles);
   const [chartMode, setChartMode] = useState<ChartMode>('kmpl');
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+  const [bannerHeight, setBannerHeight] = useState(0);
 
   function handleAddVehiclePress() {
     if (!isPro && vehicles.length >= 1) {
@@ -85,15 +87,18 @@ export default function DashboardScreen({ navigation }: Props) {
           </Text>
         </Pressable>
         <View style={styles.headerActions}>
-          <Pressable onPress={() => navigation.navigate('Maintenance')} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>Maintenance{!isPro ? ' 🔒' : ''}</Text>
-          </Pressable>
-          <Pressable onPress={handleAddVehiclePress} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>+ Vehicle{!isPro && vehicles.length >= 1 ? ' 🔒' : ''}</Text>
-          </Pressable>
-          <Pressable onPress={() => navigation.navigate('Settings')} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>Settings</Text>
-          </Pressable>
+          <HeaderAction
+            icon="🔧" label="Service" locked={!isPro}
+            onPress={() => navigation.navigate('Maintenance')}
+          />
+          <HeaderAction
+            icon="＋" label="Vehicle" locked={!isPro && vehicles.length >= 1}
+            onPress={handleAddVehiclePress}
+          />
+          <HeaderAction
+            icon="⚙" label="Settings"
+            onPress={() => navigation.navigate('Settings')}
+          />
         </View>
       </View>
 
@@ -129,7 +134,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 <StatTile label="Cost / km" value={avgCostKm ? `${currency.symbol}${fmt(avgCostKm, 3)}` : '—'} />
               </View>
 
-              <View style={styles.card}>
+              <Card style={styles.card}>
                 <View style={styles.chartTabs}>
                   {(Object.keys(chartConfig) as ChartMode[]).map((mode) => (
                     <Pressable key={mode} onPress={() => setChartMode(mode)} style={styles.chartTab}>
@@ -140,7 +145,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   ))}
                 </View>
                 <LineChart points={activeChart.points} color={activeChart.color} yLabel={activeChart.label} emptyHint={activeChart.hint} />
-              </View>
+              </Card>
 
               <Text style={styles.sectionTitle}>Fill History</Text>
             </>
@@ -168,10 +173,32 @@ export default function DashboardScreen({ navigation }: Props) {
         />
       )}
 
-      <Pressable style={styles.fab} onPress={() => navigation.navigate('AddFill')}>
+      <Pressable
+        style={[styles.fab, { bottom: 24 + insets.bottom + bannerHeight }]}
+        onPress={() => navigation.navigate('AddFill')}
+      >
         <Text style={styles.fabText}>+</Text>
       </Pressable>
+
+      <AdBanner onHeightChange={setBannerHeight} />
     </SafeAreaView>
+  );
+}
+
+function HeaderAction({ icon, label, locked, onPress }: {
+  icon: string; label: string; locked?: boolean; onPress: () => void;
+}) {
+  const { styles } = useThemedStyles(makeStyles);
+  return (
+    <Pressable onPress={onPress} style={styles.headerAction}>
+      <Text style={styles.headerActionIcon}>{icon}</Text>
+      <Text style={styles.headerActionLabel}>{label}</Text>
+      {locked && (
+        <View style={styles.lockBadge}>
+          <Text style={styles.lockBadgeText}>🔒</Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -181,21 +208,36 @@ function makeStyles(colors: ThemeColors) {
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40 },
     emptyText: { color: colors.faint, fontSize: 13 },
     header: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-      padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
     },
-    vehicleSwitcher: { flex: 1 },
-    vehicleName: { fontSize: 18, fontWeight: '800', color: colors.text },
+    vehicleSwitcher: { flex: 1, marginRight: 12 },
+    vehicleName: { fontSize: 19, fontWeight: '800', color: colors.text },
     vehicleSub: { fontSize: 12, color: colors.faint, marginTop: 2 },
-    headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 190 },
-    iconBtn: { paddingVertical: 6, paddingHorizontal: 8, borderWidth: 1, borderColor: colors.border },
-    iconBtnText: { fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase' },
+    headerActions: { flexDirection: 'row', gap: 8 },
+    headerAction: {
+      width: 58, paddingVertical: 8, borderRadius: 12, gap: 2,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border,
+    },
+    headerActionIcon: { fontSize: 17, color: colors.text },
+    headerActionLabel: {
+      fontSize: 8.5, fontWeight: '700', letterSpacing: 0.3,
+      textTransform: 'uppercase', color: colors.faint,
+    },
+    lockBadge: {
+      position: 'absolute', top: -5, right: -5,
+      width: 17, height: 17, borderRadius: 9,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.amber, borderWidth: 2, borderColor: colors.bg,
+    },
+    lockBadgeText: { fontSize: 7.5, lineHeight: 8 },
     vehiclePicker: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
     vehiclePickerRow: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border },
     vehiclePickerText: { color: colors.text, fontSize: 14 },
     listContent: { padding: 16, paddingBottom: 100 },
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-    card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 20 },
+    card: { padding: 12, marginBottom: 20 },
     chartTabs: { flexDirection: 'row', gap: 16, marginBottom: 8 },
     chartTab: { paddingVertical: 4 },
     chartTabText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.faint },
@@ -214,6 +256,6 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
       shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
     },
-    fabText: { fontSize: 28, color: '#0b0f19', fontWeight: '700', marginTop: -2 },
+    fabText: { fontSize: 28, color: colors.onAccent, fontWeight: '700', marginTop: -2 },
   });
 }

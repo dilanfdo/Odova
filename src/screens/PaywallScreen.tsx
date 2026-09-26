@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEntitlement } from '../context/EntitlementContext';
 import { PRO_PRICE_DISPLAY } from '../lib/entitlements';
-import { Button } from '../components/ui';
-import { useColors, type ThemeColors } from '../theme';
+import { Button, ScreenHeader } from '../components/ui';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
@@ -20,8 +20,7 @@ const BENEFITS = [
 
 export default function PaywallScreen({ navigation }: Props) {
   const { purchasePro, restorePurchases } = useEntitlement();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { styles } = useThemedStyles(makeStyles);
   const [busy, setBusy] = useState(false);
 
   async function handlePurchase() {
@@ -56,6 +55,7 @@ export default function PaywallScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+      <ScreenHeader onClose={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>ODOVA PRO</Text>
@@ -85,9 +85,6 @@ export default function PaywallScreen({ navigation }: Props) {
         <Pressable onPress={handleRestore} disabled={busy} style={{ marginTop: 16, alignItems: 'center' }}>
           <Text style={styles.restore}>Restore Purchases</Text>
         </Pressable>
-        <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, alignItems: 'center' }}>
-          <Text style={styles.cancel}>Not now</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -96,7 +93,7 @@ export default function PaywallScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 24, paddingTop: 32 },
+    content: { padding: 24, paddingTop: 12 },
     badge: { alignSelf: 'flex-start', backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 16 },
     badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
     title: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 8, lineHeight: 32 },
@@ -107,6 +104,5 @@ function makeStyles(colors: ThemeColors) {
     benefitTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
     benefitDesc: { fontSize: 12.5, color: colors.faint, marginTop: 2, lineHeight: 17 },
     restore: { fontSize: 13, fontWeight: '700', color: colors.accent },
-    cancel: { fontSize: 13, color: colors.faint },
   });
 }

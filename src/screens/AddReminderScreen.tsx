@@ -1,22 +1,25 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { addReminder, type DueType } from '../lib/reminders';
 import { scheduleDueDateNotification } from '../lib/notifications';
-import { Field, Button } from '../components/ui';
-import { useColors, type ThemeColors } from '../theme';
+import { Field, Button, ScreenHeader, ErrorText, ChipGroup } from '../components/ui';
+import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
 
 const PRESETS = ['Oil change', 'Tyre rotation', 'Brake inspection', 'Insurance renewal', 'Registration renewal'];
+const DUE_TYPE_OPTIONS: { value: DueType; label: string }[] = [
+  { value: 'date', label: 'Date' },
+  { value: 'odometer', label: 'Odometer' },
+];
 
 export default function AddReminderScreen({ navigation }: Props) {
   const { activeVehicleId } = useGarage();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { styles } = useThemedStyles(makeStyles);
   const [title, setTitle] = useState('');
   const [dueType, setDueType] = useState<DueType>('date');
   const [dueDate, setDueDate] = useState('');
@@ -65,34 +68,20 @@ export default function AddReminderScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+    <ScreenHeader title="New Reminder" onClose={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>New Reminder</Text>
-
-      <View style={styles.chipRow}>
-        {PRESETS.map((p) => (
-          <Pressable key={p} onPress={() => setTitle(p)} style={styles.chip}>
-            <Text style={styles.chipText}>{p}</Text>
-          </Pressable>
-        ))}
+      <View style={styles.presetsWrap}>
+        <ChipGroup
+          options={PRESETS.map((p) => ({ value: p, label: p }))}
+          onChange={setTitle}
+        />
       </View>
 
       <Field label="Title" placeholder="e.g. Oil change" value={title} onChangeText={setTitle} />
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Remind by</Text>
-        <View style={styles.chipRow}>
-          {(['date', 'odometer'] as DueType[]).map((t) => (
-            <Pressable
-              key={t}
-              onPress={() => setDueType(t)}
-              style={[styles.typeChip, dueType === t && styles.typeChipActive]}
-            >
-              <Text style={[styles.chipText, dueType === t && styles.typeChipTextActive]}>
-                {t === 'date' ? 'Date' : 'Odometer'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <ChipGroup options={DUE_TYPE_OPTIONS} value={dueType} onChange={setDueType} />
       </View>
 
       {dueType === 'date' ? (
@@ -103,12 +92,9 @@ export default function AddReminderScreen({ navigation }: Props) {
 
       <Field label="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ErrorText>{error}</ErrorText>
 
       <Button title="Save Reminder" variant="fill" onPress={handleSave} loading={busy} />
-      <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, alignItems: 'center' }}>
-        <Text style={styles.cancel}>Cancel</Text>
-      </Pressable>
     </ScrollView>
     </SafeAreaView>
   );
@@ -117,20 +103,12 @@ export default function AddReminderScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 20 },
-    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 16 },
+    content: { padding: 20, paddingTop: 4 },
     fieldGroup: { marginBottom: 14, gap: 8 },
     label: {
       fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
       textTransform: 'uppercase', color: colors.faint,
     },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-    chip: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border },
-    chipText: { fontSize: 12, color: colors.muted },
-    typeChip: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border },
-    typeChipActive: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.1)' },
-    typeChipTextActive: { color: colors.text, fontWeight: '700' },
-    error: { color: colors.red, fontSize: 13, marginBottom: 12 },
-    cancel: { fontSize: 13, color: colors.faint },
+    presetsWrap: { marginBottom: 14 },
   });
 }

@@ -9,6 +9,10 @@ import { useAccount } from '../context/AccountContext';
 import * as api from '../lib/api';
 import { CURRENCIES } from '../lib/currencies';
 import { computeStats, fmt } from '../lib/fuel-utils';
+import {
+  type UnitSystem, distanceUnitLabel, volumeUnitLabel, efficiencyUnitLabel, costPerDistanceUnitLabel,
+  kmToDisplayDistance, litresToDisplayVolume, pricePerLitreToDisplay, costPerKmToDisplay, kmplToMpg,
+} from '../lib/units';
 import { Button, Field, ConsentNote, ScreenHeader, ErrorText, SegmentedControl, ChipGroup, Card } from '../components/ui';
 import { useThemedStyles, useThemeMode, type ThemeColors, type ThemeMode } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -22,13 +26,23 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: 'System' },
 ];
 
+const UNIT_OPTIONS: { value: UnitSystem; label: string }[] = [
+  { value: 'metric', label: 'Metric (km, L)' },
+  { value: 'imperial', label: 'Imperial (mi, gal)' },
+];
+
 export default function SettingsScreen({ navigation }: Props) {
-  const { userCode, currencyCode, changeCurrency, deleteAllData, restoreFromAccount, fills, vehicles, activeVehicleId } = useGarage();
+  const {
+    userCode, currencyCode, unitSystem, changeCurrency, changeUnitSystem,
+    deleteAllData, restoreFromAccount, fills, reminders, vehicles, activeVehicleId,
+  } = useGarage();
   const { isPro, devClearPro, purchasePro } = useEntitlement();
-  const { session, sendMagicLink, signOut } = useAccount();
+  const { session, sendMagicLink, signOut, deleteAccount } = useAccount();
   const { mode, setMode } = useThemeMode();
   const { colors, styles } = useThemedStyles(makeStyles);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [accountDeleteBusy, setAccountDeleteBusy] = useState(false);
 
   const [email, setEmail] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
@@ -130,19 +144,90 @@ export default function SettingsScreen({ navigation }: Props) {
       navigation.navigate('Paywall');
       return;
     }
-    const stats = computeStats(fills);
-    const vehicle = vehicles.find((v) => v.id === activeVehicleId);
-    const header = ['Date', 'Odometer (km)', 'Distance (km)', 'Litres', 'Price', 'Total Cost', 'L/100km', 'km/L', 'Cost/km', 'Partial', 'Notes'];
-    const rows = stats.map((s) => [
-      s.fill.fill_date, s.fill.odometer, s.distance ?? '', s.fill.litres, s.fill.price_per_litre,
-      fmt(s.totalCost), s.l100km ? fmt(s.l100km) : '', s.kmpl ? fmt(s.kmpl) : '',
-      s.costPerKm ? fmt(s.costPerKm, 3) : '', s.fill.is_partial ? 'Yes' : 'No', s.fill.notes ?? '',
-    ]);
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    await Share.share({
-      title: `fuel-log-${vehicle?.make ?? 'vehicle'}.csv`,
-      message: csv,
-    });
+    if (!userCode) return;
+    setExporting(true);
+    try {
+      // Every vehicle's fuel fills and maintenance reminders, not just the
+      // active vehicle — reminders live only in local AsyncStorage (see
+      // lib/reminders.ts), so this is the one place that ever needs to read
+      // all of them at once. One flat CSV with a Vehicle/Record Type pair of
+      // columns rather than separate files, since Share.share only carries
+      // a single text payload cross-platform. Values export in the user's
+      // chosen unit system (units.ts) — storage/API stay metric regardless.
+      const distU = distanceUnitLabel(unitSystem);
+      const volU = volumeUnitLabel(unitSystem);
+      const effU = efficiencyUnitLabel(unitSystem);
+      const costU = costPerDistanceUnitLabel(unitSystem);
+      const header = [
+        'Vehicle', 'Record Type', 'Date', `Odometer (${distU})`, `Distance (${distU})`, `Volume (${volU})`,
+        `Price/${volU}`, 'Total Cost', effU, `Cost${costU}`, 'Partial',
+        'Title', 'Due Type', 'Due Date', `Due Odometer (${distU})`, 'Completed', 'Notes',
+      ];
+      const rows: (string | number)[][] = [];
+
+      for (const v of vehicles) {
+        const label = v.nickname || `${v.make} ${v.model}`;
+
+        const vehicleFills = v.id === activeVehicleId ? fills : await api.fetchFills(userCode, v.id);
+        const stats = computeStats(vehicleFills);
+        for (const s of stats) {
+          const efficiency = unitSystem === 'imperial'
+            ? (s.kmpl ? fmt(kmplToMpg(s.kmpl)) : '')
+            : (s.kmpl ? fmt(s.kmpl) : '');
+          rows.push([
+            label, 'Fuel', s.fill.fill_date,
+            fmt(kmToDisplayDistance(s.fill.odometer, unitSystem)),
+            s.distance !== null ? fmt(kmToDisplayDistance(s.distance, unitSystem)) : '',
+            fmt(litresToDisplayVolume(s.fill.litres, unitSystem)),
+            fmt(pricePerLitreToDisplay(s.fill.price_per_litre, unitSystem)),
+            fmt(s.totalCost), efficiency,
+            s.costPerKm ? fmt(costPerKmToDisplay(s.costPerKm, unitSystem), 3) : '',
+            s.fill.is_partial ? 'Yes' : 'No',
+            '', '', '', '', '', s.fill.notes ?? '',
+          ]);
+        }
+
+        const vehicleReminders = v.id === activeVehicleId ? reminders : await api.fetchReminders(userCode, v.id);
+        for (const r of vehicleReminders) {
+          rows.push([
+            label, 'Maintenance', '', '', '', '', '', '', '', '', '',
+            r.title, r.due_type,
+            r.due_date ?? '',
+            r.due_odometer !== null ? fmt(kmToDisplayDistance(r.due_odometer, unitSystem)) : '',
+            r.completed_at ? 'Yes' : 'No', r.notes ?? '',
+          ]);
+        }
+      }
+
+      const csv = [header, ...rows]
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      await Share.share({
+        title: `odova-export-${userCode}.csv`,
+        message: csv,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your account and sign-in. Your garage and fill-up history are not deleted — they stay available anonymously via your sync code. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account', style: 'destructive', onPress: async () => {
+            setAccountDeleteBusy(true);
+            const result = await deleteAccount();
+            setAccountDeleteBusy(false);
+            if (!result.ok) Alert.alert('Could not delete account', result.error ?? 'Please try again.');
+          },
+        },
+      ]
+    );
   }
 
   function confirmDeleteAll() {
@@ -206,9 +291,14 @@ export default function SettingsScreen({ navigation }: Props) {
       <Card style={styles.card}>
         {!session ? (
           magicLinkSent ? (
-            <Text style={styles.hint}>
-              Check {email} for a sign-in link. Optional — your sync code keeps working without it.
-            </Text>
+            <>
+              <Text style={styles.hint}>
+                Check {email} for a sign-in link. Optional — your sync code keeps working without it.
+              </Text>
+              <Pressable onPress={() => { setMagicLinkSent(false); setAuthError(null); }}>
+                <Text style={styles.editEmailLink}>Wrong email? Edit and resend</Text>
+              </Pressable>
+            </>
           ) : (
             <>
               <Text style={styles.hint}>
@@ -234,14 +324,9 @@ export default function SettingsScreen({ navigation }: Props) {
           <>
             <Text style={styles.code}>{session.user.email}</Text>
             {claimState === 'owned' && (
-              <>
-                <Text style={[styles.hint, { color: colors.green }]}>
-                  This garage is linked to your account.
-                </Text>
-                <Pressable onPress={handleUnlink} disabled={claimBusy} style={styles.dangerLink}>
-                  <Text style={styles.dangerLinkText}>{claimBusy ? 'Unlinking…' : 'Unlink from account'}</Text>
-                </Pressable>
-              </>
+              <Text style={[styles.hint, { color: colors.green }]}>
+                This garage is linked to your account.
+              </Text>
             )}
             {claimState === 'claimed_other' && (
               <Text style={[styles.hint, { color: colors.red }]}>
@@ -249,20 +334,30 @@ export default function SettingsScreen({ navigation }: Props) {
               </Text>
             )}
             {claimState === 'unclaimed' && (
-              <>
-                <Text style={styles.hint}>Link this garage to your account?</Text>
-                <Pressable onPress={handleClaim} disabled={claimBusy} style={styles.upgradeBtn}>
-                  <Text style={styles.upgradeBtnText}>{claimBusy ? 'Linking…' : 'Link This Garage'}</Text>
-                </Pressable>
-              </>
+              <Text style={styles.hint}>Link this garage to your account?</Text>
             )}
             {claimMessage && <Text style={styles.hint}>{claimMessage}</Text>}
-            <Pressable onPress={handleRestoreFromAccount} style={{ marginTop: 10 }}>
-              <Text style={styles.restoreLink}>Restore garage from account</Text>
-            </Pressable>
-            <Pressable onPress={() => void signOut()} style={styles.dangerLink}>
-              <Text style={styles.dangerLinkText}>Sign Out</Text>
-            </Pressable>
+
+            <View style={styles.accountActions}>
+              {claimState === 'owned' && (
+                <Button
+                  title={claimBusy ? 'Unlinking…' : 'Unlink From Account'}
+                  variant="outline" onPress={handleUnlink} disabled={claimBusy}
+                />
+              )}
+              {claimState === 'unclaimed' && (
+                <Button
+                  title={claimBusy ? 'Linking…' : 'Link This Garage'}
+                  variant="fill" onPress={handleClaim} disabled={claimBusy}
+                />
+              )}
+              <Button title="Restore Garage From Account" variant="outline" onPress={handleRestoreFromAccount} />
+              <Button title="Sign Out" variant="outline" onPress={() => void signOut()} />
+              <Button
+                title={accountDeleteBusy ? 'Deleting…' : 'Delete Account'}
+                variant="danger" onPress={confirmDeleteAccount} disabled={accountDeleteBusy}
+              />
+            </View>
           </>
         )}
       </Card>
@@ -274,8 +369,11 @@ export default function SettingsScreen({ navigation }: Props) {
         onChange={changeCurrency}
       />
 
+      <Text style={styles.sectionLabel}>Units</Text>
+      <SegmentedControl options={UNIT_OPTIONS} value={unitSystem} onChange={changeUnitSystem} />
+
       <Text style={styles.sectionLabel}>Data</Text>
-      <Button title={isPro ? 'Export CSV' : 'Export CSV 🔒 Pro'} onPress={exportCSV} style={{ marginBottom: 10 }} />
+      <Button title={isPro ? 'Export CSV' : 'Export CSV 🔒 Pro'} onPress={exportCSV} loading={exporting} style={{ marginBottom: 10 }} />
       <Button title="Delete All Garage Data" variant="danger" onPress={confirmDeleteAll} />
     </ScrollView>
     </SafeAreaView>
@@ -301,8 +399,7 @@ function makeStyles(colors: ThemeColors) {
     hint: { fontSize: 12, color: colors.faint, marginTop: 8, lineHeight: 17 },
     copyBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.amber, paddingVertical: 8, alignItems: 'center' },
     copyBtnText: { color: colors.amber, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-    dangerLink: { marginTop: 12 },
-    dangerLinkText: { color: colors.red, fontSize: 12, fontWeight: '700' },
-    restoreLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+    accountActions: { gap: 10, marginTop: 14 },
+    editEmailLink: { color: colors.accent, fontSize: 13, fontWeight: '700', marginTop: 8 },
   });
 }

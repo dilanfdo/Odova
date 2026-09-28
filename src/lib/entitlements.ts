@@ -75,6 +75,20 @@ export async function unlinkEntitlementFromAccount(): Promise<void> {
   }
 }
 
+/** The current RevenueCat identity (anonymous or account-linked), for the
+ * server to verify entitlement on requests it can't otherwise authenticate
+ * (e.g. creating a 2nd vehicle while not signed in) — see api.ts's
+ * createVehicle. null when RevenueCat isn't configured (dev simulation). */
+export async function getRevenueCatAppUserId(): Promise<string | null> {
+  if (!useRevenueCat()) return null;
+  try {
+    const Purchases = await loadPurchases();
+    return await Purchases.getAppUserID();
+  } catch {
+    return null;
+  }
+}
+
 export async function getStoredIsPro(): Promise<boolean> {
   if (useRevenueCat()) {
     try {

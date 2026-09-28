@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, FlatList, Alert,
+  View, Text, StyleSheet, Pressable, FlatList, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { useEntitlement } from '../context/EntitlementContext';
+import { useAccount } from '../context/AccountContext';
 import { computeStats, fmt, fmtDate } from '../lib/fuel-utils';
 import { currencyByCode } from '../lib/currencies';
+import {
+  kmToDisplayDistance, litresToDisplayVolume, costPerKmToDisplay, kmplToMpg,
+  distanceUnitLabel, volumeUnitLabel, efficiencyUnitLabel, costPerDistanceUnitLabel,
+} from '../lib/units';
 import { LineChart } from '../components/LineChart';
 import { StatTile, Card } from '../components/ui';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -16,14 +21,23 @@ import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
-type ChartMode = 'kmpl' | 'l100km' | 'spend';
+type ChartMode = 'efficiency' | 'l100km' | 'spend';
 
 export default function DashboardScreen({ navigation }: Props) {
-  const { vehicles, activeVehicleId, setActiveVehicleId, fills, currencyCode, removeFill, dataLoading } = useGarage();
+  const {
+    vehicles, activeVehicleId, setActiveVehicleId, fills, currencyCode, unitSystem,
+    removeFill, removeVehicle, dataLoading,
+  } = useGarage();
   const { isPro } = useEntitlement();
+  const { session } = useAccount();
   const insets = useSafeAreaInsets();
   const { colors, styles } = useThemedStyles(makeStyles);
-  const [chartMode, setChartMode] = useState<ChartMode>('kmpl');
+  const [chartMode, setChartMode] = useState<ChartMode>('efficiency');
+  const isImperial = unitSystem === 'imperial';
+  const distU = distanceUnitLabel(unitSystem);
+  const volU = volumeUnitLabel(unitSystem);
+  const effU = efficiencyUnitLabel(unitSystem);
+  const costU = costPerDistanceUnitLabel(unitSystem);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [bannerHeight, setBannerHeight] = useState(0);
 
@@ -42,11 +56,15 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const avgL100 = validStats.length ? validStats.reduce((a, s) => a + s.l100km!, 0) / validStats.length : null;
   const avgKmpl = validStats.length ? validStats.reduce((a, s) => a + s.kmpl!, 0) / validStats.length : null;
+  const avgEfficiency = avgKmpl === null ? null : (isImperial ? kmplToMpg(avgKmpl) : avgKmpl);
   const totalSpend = fillStats.reduce((a, s) => a + s.totalCost, 0);
   const totalKm = fillStats.filter((s) => s.distance).reduce((a, s) => a + s.distance!, 0);
   const avgCostKm = totalKm > 0 ? totalSpend / totalKm : null;
+  const avgCostDistance = avgCostKm === null ? null : costPerKmToDisplay(avgCostKm, unitSystem);
 
-  const kmplPoints = fillStats.filter((s) => s.kmpl !== null).map((s) => ({ x: s.fill.fill_date.slice(5), y: s.kmpl! }));
+  const efficiencyPoints = fillStats
+    .filter((s) => s.kmpl !== null)
+    .map((s) => ({ x: s.fill.fill_date.slice(5), y: isImperial ? kmplToMpg(s.kmpl!) : s.kmpl! }));
   const l100Points = fillStats.filter((s) => s.l100km !== null).map((s) => ({ x: s.fill.fill_date.slice(5), y: s.l100km! }));
   const spendPoints = (() => {
     let cumulative = 0;
@@ -54,17 +72,32 @@ export default function DashboardScreen({ navigation }: Props) {
   })();
 
   const chartConfig: Record<ChartMode, { label: string; points: { x: string; y: number }[]; color: string; hint: string }> = {
-    kmpl: { label: 'km/L', points: kmplPoints, color: colors.accent, hint: 'Log a 3rd fill-up to unlock the efficiency chart' },
+    efficiency: { label: effU, points: efficiencyPoints, color: colors.accent, hint: 'Log a 3rd fill-up to unlock the efficiency chart' },
     l100km: { label: 'L/100km', points: l100Points, color: colors.amber, hint: 'Log a 3rd fill-up to unlock the efficiency chart' },
     spend: { label: `Spend (${currency.code})`, points: spendPoints, color: colors.green, hint: 'Log your first fill-up to see spending over time' },
   };
-  const activeChart = chartConfig[chartMode];
+  // No common imperial analogue for L/100km (see units.ts) — that tab only
+  // makes sense in metric mode.
+  const chartModes: ChartMode[] = isImperial ? ['efficiency', 'spend'] : ['efficiency', 'l100km', 'spend'];
+  const safeChartMode = isImperial && chartMode === 'l100km' ? 'efficiency' : chartMode;
+  const activeChart = chartConfig[safeChartMode];
 
   function confirmDeleteFill(id: string) {
     Alert.alert('Delete this fill-up?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => void removeFill(id) },
     ]);
+  }
+
+  function confirmDeleteVehicle(id: string, label: string) {
+    Alert.alert(
+      `Remove ${label}?`,
+      'This deletes the vehicle and all of its fill-up history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => void removeVehicle(id) },
+      ]
+    );
   }
 
   if (!activeVehicle) {
@@ -78,12 +111,18 @@ export default function DashboardScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.header}>
-        <Pressable style={styles.vehicleSwitcher} onPress={() => setShowVehiclePicker((s) => !s)}>
+        <Pressable
+          style={styles.vehicleSwitcher}
+          onPress={() => {
+            if (vehicles.length > 1) setShowVehiclePicker((s) => !s);
+            else navigation.navigate('AddVehicle', { editId: activeVehicle.id });
+          }}
+        >
           <Text style={styles.vehicleName}>
             {activeVehicle.nickname || `${activeVehicle.make} ${activeVehicle.model}`}
           </Text>
           <Text style={styles.vehicleSub}>
-            {activeVehicle.make} {activeVehicle.model} {activeVehicle.year ? `· ${activeVehicle.year}` : ''} {vehicles.length > 1 ? '▾' : ''}
+            {activeVehicle.make} {activeVehicle.model} {activeVehicle.year ? `· ${activeVehicle.year}` : ''} {vehicles.length > 1 ? '▾' : '✎'}
           </Text>
         </Pressable>
         <View style={styles.headerActions}>
@@ -96,27 +135,52 @@ export default function DashboardScreen({ navigation }: Props) {
             onPress={handleAddVehiclePress}
           />
           <HeaderAction
-            icon="⚙" label="Settings"
+            icon="⚙" label="Settings" signedIn={Boolean(session)}
             onPress={() => navigation.navigate('Settings')}
           />
         </View>
       </View>
 
-      {showVehiclePicker && vehicles.length > 1 && (
-        <View style={styles.vehiclePicker}>
-          {vehicles.map((v) => (
-            <Pressable
-              key={v.id}
-              onPress={() => { setActiveVehicleId(v.id); setShowVehiclePicker(false); }}
-              style={styles.vehiclePickerRow}
-            >
-              <Text style={[styles.vehiclePickerText, v.id === activeVehicleId && { color: colors.accent }]}>
-                {v.nickname || `${v.make} ${v.model}`}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      <Modal
+        visible={showVehiclePicker && vehicles.length > 1}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowVehiclePicker(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setShowVehiclePicker(false)}>
+          <View style={[styles.vehiclePicker, { top: insets.top + 68 }]}>
+            {vehicles.map((v, i) => {
+              const label = v.nickname || `${v.make} ${v.model}`;
+              return (
+                <View key={v.id} style={[styles.vehiclePickerRow, i > 0 && styles.vehiclePickerRowDivider]}>
+                  <Pressable
+                    style={styles.vehiclePickerName}
+                    onPress={() => { setActiveVehicleId(v.id); setShowVehiclePicker(false); }}
+                  >
+                    <Text style={[styles.vehiclePickerText, v.id === activeVehicleId && { color: colors.accent }]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    hitSlop={8}
+                    style={styles.vehiclePickerAction}
+                    onPress={() => { setShowVehiclePicker(false); navigation.navigate('AddVehicle', { editId: v.id }); }}
+                  >
+                    <Text style={styles.vehiclePickerActionText}>✎</Text>
+                  </Pressable>
+                  <Pressable
+                    hitSlop={8}
+                    style={styles.vehiclePickerAction}
+                    onPress={() => confirmDeleteVehicle(v.id, label)}
+                  >
+                    <Text style={[styles.vehiclePickerActionText, { color: colors.red }]}>🗑</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
 
       {dataLoading ? (
         <DashboardSkeleton showHeader={false} />
@@ -128,17 +192,17 @@ export default function DashboardScreen({ navigation }: Props) {
           ListHeaderComponent={
             <>
               <View style={styles.statsGrid}>
-                <StatTile label="Avg km/L" value={avgKmpl ? fmt(avgKmpl, 1) : '—'} />
-                <StatTile label="Avg L/100km" value={avgL100 ? fmt(avgL100, 1) : '—'} />
+                <StatTile label={`Avg ${effU}`} value={avgEfficiency ? fmt(avgEfficiency, 1) : '—'} />
+                {!isImperial && <StatTile label="Avg L/100km" value={avgL100 ? fmt(avgL100, 1) : '—'} />}
                 <StatTile label="Total Spend" value={`${currency.symbol}${fmt(totalSpend)}`} />
-                <StatTile label="Cost / km" value={avgCostKm ? `${currency.symbol}${fmt(avgCostKm, 3)}` : '—'} />
+                <StatTile label={`Cost ${costU}`} value={avgCostDistance ? `${currency.symbol}${fmt(avgCostDistance, 3)}` : '—'} />
               </View>
 
               <Card style={styles.card}>
                 <View style={styles.chartTabs}>
-                  {(Object.keys(chartConfig) as ChartMode[]).map((mode) => (
+                  {chartModes.map((mode) => (
                     <Pressable key={mode} onPress={() => setChartMode(mode)} style={styles.chartTab}>
-                      <Text style={[styles.chartTabText, chartMode === mode && { color: colors.text }]}>
+                      <Text style={[styles.chartTabText, safeChartMode === mode && { color: colors.text }]}>
                         {chartConfig[mode].label}
                       </Text>
                     </Pressable>
@@ -151,17 +215,25 @@ export default function DashboardScreen({ navigation }: Props) {
             </>
           }
           renderItem={({ item }) => (
-            <Pressable onLongPress={() => confirmDeleteFill(item.fill.id)} style={styles.fillRow}>
+            <Pressable
+              onPress={() => navigation.navigate('AddFill', { editId: item.fill.id })}
+              onLongPress={() => confirmDeleteFill(item.fill.id)}
+              style={styles.fillRow}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.fillDate}>{fmtDate(item.fill.fill_date)}</Text>
                 <Text style={styles.fillMeta}>
-                  {item.fill.odometer.toLocaleString()} km · {fmt(item.fill.litres)} L
+                  {Math.round(kmToDisplayDistance(item.fill.odometer, unitSystem)).toLocaleString()} {distU} · {fmt(litresToDisplayVolume(item.fill.litres, unitSystem))} {volU}
                   {item.fill.is_partial ? ' · partial' : ''}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.fillCost}>{currency.symbol}{fmt(item.totalCost)}</Text>
-                {item.kmpl ? <Text style={styles.fillEff}>{fmt(item.kmpl, 1)} km/L</Text> : null}
+                {item.kmpl ? (
+                  <Text style={styles.fillEff}>
+                    {fmt(isImperial ? kmplToMpg(item.kmpl) : item.kmpl, 1)} {effU}
+                  </Text>
+                ) : null}
               </View>
             </Pressable>
           )}
@@ -185,8 +257,8 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 }
 
-function HeaderAction({ icon, label, locked, onPress }: {
-  icon: string; label: string; locked?: boolean; onPress: () => void;
+function HeaderAction({ icon, label, locked, signedIn, onPress }: {
+  icon: string; label: string; locked?: boolean; signedIn?: boolean; onPress: () => void;
 }) {
   const { styles } = useThemedStyles(makeStyles);
   return (
@@ -198,6 +270,7 @@ function HeaderAction({ icon, label, locked, onPress }: {
           <Text style={styles.lockBadgeText}>🔒</Text>
         </View>
       )}
+      {signedIn && <View style={styles.signedInBadge} />}
     </Pressable>
   );
 }
@@ -232,9 +305,27 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: colors.amber, borderWidth: 2, borderColor: colors.bg,
     },
     lockBadgeText: { fontSize: 7.5, lineHeight: 8 },
-    vehiclePicker: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
-    vehiclePickerRow: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border },
+    signedInBadge: {
+      position: 'absolute', top: -3, right: -3,
+      width: 12, height: 12, borderRadius: 6,
+      backgroundColor: colors.green, borderWidth: 2, borderColor: colors.bg,
+    },
+    pickerBackdrop: { flex: 1, backgroundColor: colors.scrim },
+    vehiclePicker: {
+      position: 'absolute', left: 16, right: 16,
+      backgroundColor: colors.surface, borderRadius: 14,
+      borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+      shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8,
+    },
+    vehiclePickerRow: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingVertical: 12, paddingHorizontal: 12,
+    },
+    vehiclePickerRowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
+    vehiclePickerName: { flex: 1 },
     vehiclePickerText: { color: colors.text, fontSize: 14 },
+    vehiclePickerAction: { paddingHorizontal: 10, paddingVertical: 4 },
+    vehiclePickerActionText: { fontSize: 15, color: colors.faint },
     listContent: { padding: 16, paddingBottom: 100 },
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
     card: { padding: 12, marginBottom: 20 },

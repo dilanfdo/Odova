@@ -11,7 +11,7 @@ import React, {
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { setAccessTokenGetter } from '../lib/api';
+import { setAccessTokenGetter, deleteAccount as apiDeleteAccount } from '../lib/api';
 import { linkEntitlementToAccount, unlinkEntitlementFromAccount } from '../lib/entitlements';
 import { friendlyError } from '../lib/fuel-utils';
 
@@ -20,6 +20,7 @@ interface AccountContextValue {
   loading: boolean;
   sendMagicLink: (email: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 const AccountContext = createContext<AccountContextValue | null>(null);
@@ -102,8 +103,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  // Deletes the Supabase account server-side (service role — see /api/fuel
+  // POST resource=delete_account in the NDL repo), then clears the local
+  // session since the account no longer exists to hold one.
+  const deleteAccount = useCallback(async () => {
+    const result = await apiDeleteAccount();
+    if (result.ok) await supabase.auth.signOut();
+    return result;
+  }, []);
+
   return (
-    <AccountContext.Provider value={{ session, loading, sendMagicLink, signOut }}>
+    <AccountContext.Provider value={{ session, loading, sendMagicLink, signOut, deleteAccount }}>
       {children}
     </AccountContext.Provider>
   );

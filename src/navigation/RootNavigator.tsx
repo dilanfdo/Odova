@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
@@ -13,17 +14,43 @@ import MaintenanceScreen from '../screens/MaintenanceScreen';
 import AddReminderScreen from '../screens/AddReminderScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import { DashboardSkeleton } from '../components/Skeleton';
-import { useColors, useThemeMode, type ThemeColors } from '../theme';
+import { Button } from '../components/ui';
+import { useColors, useThemeMode, useThemedStyles, type ThemeColors } from '../theme';
+
+function BootErrorScreen() {
+  const { error, retryBoot } = useGarage();
+  const { styles } = useThemedStyles(makeErrorStyles);
+  return (
+    <SafeAreaView style={styles.root}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Couldn't load your garage</Text>
+        <Text style={styles.message}>
+          {error ?? 'Something went wrong. Please check your connection and try again.'}
+        </Text>
+        <Button title="Retry" variant="fill" onPress={retryBoot} style={{ marginTop: 16 }} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function makeErrorStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+    title: { fontSize: 19, fontWeight: '800', color: colors.text, marginBottom: 10, textAlign: 'center' },
+    message: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  });
+}
 
 export type RootStackParamList = {
   Onboarding: undefined;
   VehicleSetup: undefined;
   Dashboard: undefined;
-  AddFill: undefined;
-  AddVehicle: undefined;
+  AddFill: { editId?: string } | undefined;
+  AddVehicle: { editId?: string } | undefined;
   Settings: undefined;
   Maintenance: undefined;
-  AddReminder: undefined;
+  AddReminder: { editId?: string } | undefined;
   Paywall: undefined;
 };
 
@@ -48,6 +75,10 @@ export default function RootNavigator() {
         <DashboardSkeleton />
       </View>
     );
+  }
+
+  if (step === 'error') {
+    return <BootErrorScreen />;
   }
 
   return (

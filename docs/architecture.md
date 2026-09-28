@@ -43,9 +43,11 @@ authenticated purely by knowing the sync code, exactly like the web app.
 
 ```
 src/
-  lib/            fuel-utils, currencies, api client, reminders, notifications,
-                   entitlements (Pro), ads, supabase (Auth client), storage
-                   (AsyncStorage), config
+  lib/            fuel-utils, currencies, api client, reminders (type + status
+                   helper — CRUD lives in api.ts/GarageContext), units
+                   (metric/imperial conversion), notifications, entitlements
+                   (Pro), ads, supabase (Auth client), storage (AsyncStorage
+                   — device-local prefs only: theme, currency, units), config
   context/        GarageContext   — sync code, vehicles, fills, the onboarding
                                      step machine
                    EntitlementContext — Pro status
@@ -64,15 +66,24 @@ src/
 ## Why a few things are built the way they are
 
 - **No Supabase keys ship in the app.** Row-level security on
-  `fuel_vehicles`/`fuel_fills` (NDL repo migration `008`) means only the
-  server-side service-role key can touch those tables; the app never has
-  direct database access, only the REST endpoint.
+  `fuel_vehicles`/`fuel_fills`/`fuel_reminders` (NDL repo migrations `008`,
+  `011`) means only the server-side service-role key can touch those tables;
+  the app never has direct database access, only the REST endpoint.
 - **`/api/fuel` needs a trailing slash.** The NDL site runs Next.js with
   `trailingSlash: true`; `src/lib/config.ts`/`api.ts` account for this. Native
   `fetch` isn't subject to CORS, so this only ever bit browser-based testing
   (`npm run web`), never a real device.
-- **Local-only data stays local, deliberately.** Maintenance reminders and
-  their local notifications never touch the server — they live in
-  AsyncStorage on-device (see `src/lib/reminders.ts`) both to keep the sync
-  code's data footprint minimal and because there was no product need to
-  sync reminders across devices yet.
+- **Maintenance reminders sync server-side**, mirroring fills — a `fuel_reminders`
+  table (NDL repo migration `011`) synced via `GarageContext`, so they follow
+  a garage across devices the same way vehicles and fills do (including
+  restoring via a signed-in account). This used to be AsyncStorage-only,
+  device-local; it was migrated once the "reminders silently don't follow you
+  to a new device" gap was flagged as a real UX problem, not deferred forever.
+  Local notifications (`src/lib/notifications.ts`) are still scheduled
+  on-device regardless — that part necessarily stays local no matter where
+  the reminder data lives.
+- **Units are a presentation-layer concern only.** Storage and the API are
+  always metric (km, litres) — `src/lib/units.ts` converts at the edge
+  (display formatting and input parsing), controlled by a `unitSystem`
+  preference in `GarageContext` (metric/imperial, AsyncStorage-persisted).
+  This means adding a unit system needed zero backend changes.

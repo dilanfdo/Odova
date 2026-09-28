@@ -1,14 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { ProGate } from '../components/ProGate';
 import { ScreenHeader } from '../components/ui';
-import { getReminders, deleteReminder, completeReminder, reminderStatus, type Reminder } from '../lib/reminders';
+import { reminderStatus, type Reminder } from '../lib/reminders';
 import { cancelNotification } from '../lib/notifications';
 import { fmtDate, computeStats } from '../lib/fuel-utils';
+import { kmToDisplayDistance, distanceUnitLabel, type UnitSystem } from '../lib/units';
 import { useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -25,22 +25,27 @@ function statusColor(colors: ThemeColors, status: string): string {
   return map[status];
 }
 
-function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
+function ReminderRow({ reminder, currentOdometer, unitSystem, onPress, onComplete, onDelete }: {
   reminder: Reminder;
   currentOdometer: number | null;
+  unitSystem: UnitSystem;
+  onPress: () => void;
   onComplete: () => void;
   onDelete: () => void;
 }) {
   const { colors, styles } = useThemedStyles(makeStyles);
   const status = reminderStatus(reminder, currentOdometer);
   return (
-    <Pressable onLongPress={onDelete} style={styles.row}>
+    <Pressable onPress={onPress} onLongPress={onDelete} style={styles.row}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{reminder.title}</Text>
         <Text style={styles.rowMeta}>
-          {reminder.dueType === 'date' && reminder.dueDate
-            ? `Due ${fmtDate(reminder.dueDate)}`
-            : `Due at ${reminder.dueOdometer?.toLocaleString()} km`}
+          {reminder.due_type === 'date' && reminder.due_date
+            ? `Due ${fmtDate(reminder.due_date)}`
+            : reminder.due_odometer !== null
+              ? `Due at ${Math.round(kmToDisplayDistance(reminder.due_odometer, unitSystem)).toLocaleString()} ${distanceUnitLabel(unitSystem)}`
+              : ''}
+          {(reminder.recurrence_interval_days || reminder.recurrence_interval_km) ? ' · Repeats' : ''}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 6 }}>
@@ -56,35 +61,23 @@ function ReminderRow({ reminder, currentOdometer, onComplete, onDelete }: {
 }
 
 function MaintenanceList({ navigation }: Props) {
-  const { activeVehicleId, fills } = useGarage();
+  const { fills, reminders, unitSystem, completeReminder: markReminderDone, removeReminder } = useGarage();
   const { styles } = useThemedStyles(makeStyles);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-
-  const load = useCallback(() => {
-    if (!activeVehicleId) return;
-    getReminders(activeVehicleId).then(setReminders);
-  }, [activeVehicleId]);
-
-  useFocusEffect(load);
 
   const stats = computeStats(fills);
   const currentOdometer = stats.length > 0 ? stats[stats.length - 1].fill.odometer : null;
 
   async function handleComplete(r: Reminder) {
-    if (!activeVehicleId) return;
-    await completeReminder(activeVehicleId, r.id);
-    load();
+    await markReminderDone(r.id);
   }
 
   async function handleDelete(r: Reminder) {
-    if (!activeVehicleId) return;
     Alert.alert('Delete this reminder?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
-          await deleteReminder(activeVehicleId, r.id);
+          await removeReminder(r.id);
           await cancelNotification(r.id);
-          load();
         },
       },
     ]);
@@ -110,6 +103,8 @@ function MaintenanceList({ navigation }: Props) {
           <ReminderRow
             reminder={item}
             currentOdometer={currentOdometer}
+            unitSystem={unitSystem}
+            onPress={() => navigation.navigate('AddReminder', { editId: item.id })}
             onComplete={() => handleComplete(item)}
             onDelete={() => handleDelete(item)}
           />

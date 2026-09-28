@@ -52,7 +52,8 @@ credentials on hand.
 - A one-time product was created in the Play Console, matching
   `odova_pro_unlock`, priced and configured under the "Digital app sales" tax
   category.
-- A RevenueCat project was created with an entitlement (id `pro`) mapped to
+- A RevenueCat project was created with an entitlement (id `odova_pro` —
+  must match `REVENUECAT_ENTITLEMENT_ID` in `config.ts`) mapped to
   that Play Console product. A Google Cloud service account with Play
   Developer API access was created and connected to RevenueCat so it can
   validate purchases server-side (this needs *both* "View financial data"
@@ -67,12 +68,23 @@ credentials on hand.
   Billing → RevenueCat → `EntitlementContext` → gated UI unlocking — works
   outside the local-simulation fallback.
 
-## Server-side enforcement: not yet built
+## Server-side enforcement
 
-`/api/fuel` currently trusts the client's Pro gating entirely — nothing on
-the backend stops a direct API call from creating a second vehicle for a
-free-tier user. A RevenueCat webhook (`/api/revenuecat-webhook` in the NDL
-repo) already records verified entitlement status into a `pro_entitlements`
-table when a purchase event fires, but nothing reads that table to enforce
-limits yet. This is the natural next step if server-side enforcement is ever
-needed; see [known-gaps.md](./known-gaps.md).
+`/api/fuel` (NDL repo, `POST resource=vehicle`) now checks entitlement
+before allowing a 2nd+ vehicle, via `hasProEntitlement`:
+
+- **Claimed (signed-in) garages** are fully enforced today, against the
+  `pro_entitlements` table that the RevenueCat webhook
+  (`/api/revenuecat-webhook`) writes on purchase events. No row yet is
+  treated as ambiguous (not blocked) rather than as "not Pro" — a purchase
+  might simply predate the webhook being wired up — but an explicit
+  `is_pro: false` (a recorded refund/cancellation) is blocked.
+- **Anonymous garages** (the common case, since sign-in is optional) are
+  verified live against RevenueCat's REST API, using the RevenueCat identity
+  the app now sends with every vehicle-creation request
+  (`revenueCatAppUserId` — see `getRevenueCatAppUserId()` in
+  `entitlements.ts`). This needs `REVENUECAT_SECRET_API_KEY` set in the NDL
+  repo's Vercel project (the dashboard's *secret* key, distinct from the
+  public SDK key already embedded in the app) — until it's set, this path
+  fails open (doesn't block), so it activates automatically once that one
+  env var is added. See [known-gaps.md](./known-gaps.md) for current status.

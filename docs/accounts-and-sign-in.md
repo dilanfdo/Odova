@@ -27,7 +27,8 @@ duplication was needed to support a second client type.
 ## Where it lives in code
 
 - `src/context/AccountContext.tsx` — owns the session, exposes
-  `sendMagicLink`, `signOut`, and the current `session` object.
+  `sendMagicLink`, `signOut`, `deleteAccount`, and the current `session`
+  object.
 - `src/context/GarageContext.tsx` — has a boot-time effect that watches
   `session`: whenever a session appears and no sync code is stored yet, it
   automatically calls `restoreFromAccount()` to pull down the linked garage.
@@ -61,9 +62,26 @@ duplication was needed to support a second client type.
   exact one. If magic links ever start opening the website instead of the
   app again, check this allowlist first.
 
+## Account deletion
+
+`deleteAccount()` (`AccountContext`) calls `POST /api/fuel
+resource=delete_account` (NDL repo), which uses the service-role client's
+admin API (`supabase.auth.admin.deleteUser`) — the anon/session client
+can't delete its own `auth.users` row, only an admin client can. `profiles`
+and `pro_entitlements` cascade-delete with it (`on delete cascade`).
+Deliberately does **not** delete garage data: `fuel_vehicles.user_id` is
+`on delete set null` (see `002_fuel_user_id.sql`), so any claimed garage
+just falls back to anonymous sync-code-only access, the same end state as
+unlinking — a user who wants the garage data gone too still has the
+separate "Delete All Garage Data" button in Settings. Surfaced in
+`SettingsScreen`'s Account section (signed-in state only), behind a
+destructive confirmation that explains this split explicitly. This exists
+mainly because Google Play's Data Safety policy requires an in-app path to
+delete an account when the app allows in-app account creation, which
+magic-link sign-in does.
+
 ## What's not built
 
-- Deleting an account outright (only unlinking a garage from one).
 - Any identity provider besides email magic link (no Google/Apple sign-in).
-- Server-side enforcement tied to account identity — see
-  [known-gaps.md](./known-gaps.md).
+- Server-side enforcement tied to account identity beyond the vehicle-count
+  cap — see [known-gaps.md](./known-gaps.md).

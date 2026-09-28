@@ -58,6 +58,18 @@ export function fmtDate(d: string): string {
   });
 }
 
+/** Today's date as YYYY-MM-DD in the device's local timezone. Deliberately
+ * NOT `new Date().toISOString().slice(0, 10)` — that converts to UTC first,
+ * which shows yesterday's date for part of the day in any positive UTC
+ * offset timezone (e.g. Sri Lanka, UTC+5:30, for its first ~5.5 hours). */
+export function todayISODate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ── Backend error translation ───────────────────────────────────────────────────
 export function friendlyError(raw: string): string {
   const r = raw.toLowerCase();

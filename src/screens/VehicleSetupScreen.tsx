@@ -5,15 +5,18 @@ import { useGarage } from '../context/GarageContext';
 import { Field, Button, ScreenHeader, ErrorText, ChipGroup } from '../components/ui';
 import { useThemedStyles, type ThemeColors } from '../theme';
 import { FUEL_TYPES } from '../lib/types';
+import type { Vehicle } from '../lib/types';
 
-export default function VehicleSetupScreen({ onSaved, onClose }: { onSaved?: () => void; onClose?: () => void } = {}) {
-  const { addVehicle, error, vehicles } = useGarage();
+export default function VehicleSetupScreen({ editVehicle, onSaved, onClose }: {
+  editVehicle?: Vehicle; onSaved?: () => void; onClose?: () => void;
+} = {}) {
+  const { addVehicle, updateVehicle, error, vehicles } = useGarage();
   const { styles } = useThemedStyles(makeStyles);
-  const [make, setMake] = useState('');
-  const [model, setModel] = useState('');
-  const [year, setYear] = useState('');
-  const [fuelType, setFuelType] = useState('Petrol');
-  const [nickname, setNickname] = useState('');
+  const [make, setMake] = useState(editVehicle?.make ?? '');
+  const [model, setModel] = useState(editVehicle?.model ?? '');
+  const [year, setYear] = useState(editVehicle?.year ? String(editVehicle.year) : '');
+  const [fuelType, setFuelType] = useState(editVehicle?.fuel_type ?? 'Petrol');
+  const [nickname, setNickname] = useState(editVehicle?.nickname ?? '');
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState('');
 
@@ -24,7 +27,9 @@ export default function VehicleSetupScreen({ onSaved, onClose }: { onSaved?: () 
     }
     setLocalError('');
     setBusy(true);
-    const ok = await addVehicle({ make, model, year, fuelType, nickname });
+    const ok = editVehicle
+      ? await updateVehicle(editVehicle.id, { make, model, year, fuelType, nickname })
+      : await addVehicle({ make, model, year, fuelType, nickname });
     setBusy(false);
     if (ok) onSaved?.();
   }
@@ -34,7 +39,7 @@ export default function VehicleSetupScreen({ onSaved, onClose }: { onSaved?: () 
     {onClose && <ScreenHeader onClose={onClose} />}
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>
-        {vehicles.length === 0 ? 'Add your first vehicle' : 'Add a vehicle'}
+        {editVehicle ? 'Edit vehicle' : vehicles.length === 0 ? 'Add your first vehicle' : 'Add a vehicle'}
       </Text>
       <Text style={styles.subtitle}>Make and model are required — the rest is optional.</Text>
 
@@ -55,7 +60,7 @@ export default function VehicleSetupScreen({ onSaved, onClose }: { onSaved?: () 
 
       <ErrorText>{localError || error}</ErrorText>
 
-      <Button title="Save Vehicle" variant="fill" onPress={handleSave} loading={busy} style={{ marginTop: 8 }} />
+      <Button title={editVehicle ? 'Save Changes' : 'Save Vehicle'} variant="fill" onPress={handleSave} loading={busy} style={{ marginTop: 8 }} />
     </ScrollView>
     </SafeAreaView>
   );

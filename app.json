@@ -32,7 +32,8 @@
           "androidAppId": "ca-app-pub-4607423166762045~7673929662",
           "delayAppMeasurementInit": true
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {

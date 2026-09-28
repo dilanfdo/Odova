@@ -29,7 +29,12 @@ export function reminderStatus(
 ): 'done' | 'overdue' | 'upcoming' | 'ok' {
   if (r.completed_at) return 'done';
   if (r.due_type === 'date' && r.due_date) {
-    const days = (new Date(r.due_date).getTime() - Date.now()) / 86_400_000;
+    // A date-only string parses as UTC midnight, which would flag a
+    // reminder due *today* as overdue for the whole day. Compare against the
+    // end of the due day in local time instead.
+    const [y, m, d] = r.due_date.split('-').map(Number);
+    const endOfDueDay = new Date(y, m - 1, d, 23, 59, 59).getTime();
+    const days = (endOfDueDay - Date.now()) / 86_400_000;
     if (days < 0) return 'overdue';
     if (days <= 14) return 'upcoming';
     return 'ok';

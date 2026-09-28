@@ -33,14 +33,12 @@ never blocks when it can't positively verify. See
 
 ## R8/ProGuard minification
 
-The native `android/app/build.gradle` references `enableMinifyInReleaseBuilds`
-/ `enableShrinkResourcesInReleaseBuilds`, but neither is set in
-`gradle.properties`, so release builds aren't currently minified/shrunk.
-Deferred until after Pro and ads were fully wired up (to avoid debugging
-minification-related crashes on top of everything else); now that both are
-in place, this is a reasonable next thing to turn on — test a release build
-thoroughly afterward, since R8 can occasionally strip something
-reflection-based that isn't caught until runtime.
+Enabled via the `expo-build-properties` plugin in `app.json`
+(`enableMinifyInReleaseBuilds` / `enableShrinkResourcesInReleaseBuilds`),
+starting with build 8, to clear Play Console's "DEX code optimization"
+warning. A minified release build was smoke-tested on a device (launch, data
+load, ads init, RevenueCat, date picker, reminder notifications). If a future
+dependency crashes only in release builds, suspect a missing keep rule first.
 
 ## iOS
 

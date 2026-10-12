@@ -41,3 +41,5 @@ yarn-error.*
 /android
 store-assets/
 builds/
+# generated captures and store graphics (rebuild with scripts/play-store-graphics.sh)
+screenshots/

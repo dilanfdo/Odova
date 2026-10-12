@@ -21,14 +21,13 @@ unauthenticated probe, meaning `REVENUECAT_WEBHOOK_SECRET` is already set).
 
 For **anonymous** (not signed-in) garages — the common case, since accounts
 are optional — enforcement calls RevenueCat's REST API directly with the
-app's RevenueCat identity (Odova now sends `revenueCatAppUserId` on vehicle
-creation; see `getRevenueCatAppUserId()` in `entitlements.ts`). This
-requires one remaining ops step: add `REVENUECAT_SECRET_API_KEY` (RevenueCat
-dashboard → Project Settings → API Keys → **Secret** key, not the public SDK
-key already embedded in the app) to the NDL repo's Vercel project env vars.
-Until that's set, the anonymous path fails open (doesn't block) by design —
-see the code comment on `hasProEntitlement` for the full reasoning on why it
-never blocks when it can't positively verify. See
+app's RevenueCat identity (Odova sends `revenueCatAppUserId` on vehicle
+creation; see `getRevenueCatAppUserId()` in `entitlements.ts`).
+`REVENUECAT_SECRET_API_KEY` is set. A request that sends no id is treated as
+not Pro (that's the web tracker and direct API calls); infra gaps (key missing,
+RevenueCat unreachable) still fail open so a payer is never locked out. Builds
+before 17d1c4d don't send an id, so testers on those builds can't add a second
+vehicle. See
 [pro-entitlement-and-billing.md](./pro-entitlement-and-billing.md).
 
 ## R8/ProGuard minification

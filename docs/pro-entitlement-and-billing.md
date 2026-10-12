@@ -70,21 +70,31 @@ credentials on hand.
 
 ## Server-side enforcement
 
-`/api/fuel` (NDL repo, `POST resource=vehicle`) now checks entitlement
-before allowing a 2nd+ vehicle, via `hasProEntitlement`:
+`/api/fuel` (NDL repo, `POST resource=vehicle`) checks entitlement before
+allowing a 2nd+ vehicle, via `hasProEntitlement`. A second vehicle needs
+*proof* of Pro:
 
-- **Claimed (signed-in) garages** are fully enforced today, against the
-  `pro_entitlements` table that the RevenueCat webhook
-  (`/api/revenuecat-webhook`) writes on purchase events. No row yet is
-  treated as ambiguous (not blocked) rather than as "not Pro" — a purchase
-  might simply predate the webhook being wired up — but an explicit
-  `is_pro: false` (a recorded refund/cancellation) is blocked.
+- **Claimed (signed-in) garages** are checked against the `pro_entitlements`
+  table that the RevenueCat webhook (`/api/revenuecat-webhook`) writes on
+  purchase events. `is_pro: false` (a recorded refund/cancellation) is blocked.
+  A garage with no row yet (a purchase that predates the webhook) falls through
+  to the RevenueCat check below.
 - **Anonymous garages** (the common case, since sign-in is optional) are
   verified live against RevenueCat's REST API, using the RevenueCat identity
-  the app now sends with every vehicle-creation request
-  (`revenueCatAppUserId` — see `getRevenueCatAppUserId()` in
-  `entitlements.ts`). This needs `REVENUECAT_SECRET_API_KEY` set in the NDL
-  repo's Vercel project (the dashboard's *secret* key, distinct from the
-  public SDK key already embedded in the app) — until it's set, this path
-  fails open (doesn't block), so it activates automatically once that one
-  env var is added. See [known-gaps.md](./known-gaps.md) for current status.
+  the app sends with every vehicle-creation request (`revenueCatAppUserId` —
+  see `getRevenueCatAppUserId()` in `entitlements.ts`). This needs
+  `REVENUECAT_SECRET_API_KEY` set in the NDL repo's Vercel project (the
+  dashboard's *secret* key, distinct from the public SDK key embedded in the
+  app); it is set.
+- **No `revenueCatAppUserId` at all** means no proof was offered — that is the
+  web tracker and direct API calls — and is treated as *not* Pro. The web
+  tracker is deliberately limited to the free plan (one vehicle, no CSV
+  export) and prompts users to get the app.
+- **Infra gaps still fail open** (so a real payer is never locked out by
+  something they can't see): the secret key isn't configured, or RevenueCat is
+  unreachable or erroring.
+
+Dev note: with no RevenueCat SDK key (Expo Go / dev builds using the simulated
+Pro), the app has no RevenueCat id to send, so the production API will refuse a
+second vehicle. Use a garage whose owner has a `pro_entitlements` row for that
+testing.

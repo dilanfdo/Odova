@@ -3,10 +3,12 @@
 // paywall. This is deliberate — hiding Pro features entirely means free users
 // never discover them. Wrap real, interactive feature UI in `preview` too
 // (dimmed automatically) so the preview never drifts out of sync with reality.
-import React, { useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { useEntitlement } from '../context/EntitlementContext';
-import { useColors, type ThemeColors } from '../theme';
+import { Badge, Button } from './ui';
+import { Icon } from './Icon';
+import { radius, space, typography, useBottomInset, useThemedStyles, type ThemeColors } from '../theme';
 
 export function ProGate({
   children,
@@ -20,25 +22,26 @@ export function ProGate({
   onUnlockPress: () => void;
 }) {
   const { isPro } = useEntitlement();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, styles } = useThemedStyles(makeStyles);
+  const bottom = useBottomInset();
 
   if (isPro) return <>{children}</>;
 
   return (
     <View style={styles.wrap}>
-      <View pointerEvents="none" style={styles.preview}>
+      <View pointerEvents="none" style={styles.preview} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {children}
       </View>
-      <View style={styles.overlay}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>PRO</Text>
+      <View style={[styles.overlay, { paddingBottom: bottom }]}>
+        <View style={styles.card}>
+          <View style={styles.icon}>
+            <Icon name="lock" size={28} color={colors.onTertiaryContainer} />
+          </View>
+          <Badge label="PRO" align="center" />
+          <Text style={styles.title} accessibilityRole="header">{title}</Text>
+          <Text style={styles.description}>{description}</Text>
+          <Button title="Unlock with Pro" icon="star" onPress={onUnlockPress} style={styles.button} />
         </View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
-        <Pressable style={styles.button} onPress={onUnlockPress}>
-          <Text style={styles.buttonText}>Unlock with Pro</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -47,20 +50,27 @@ export function ProGate({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: { flex: 1 },
-    preview: { opacity: 0.35 },
+    preview: { flex: 1, opacity: 0.3 },
     overlay: {
-      position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-      alignItems: 'center', justifyContent: 'center', padding: 32,
-      backgroundColor: colors.scrim,
+      position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: space.xl,
     },
-    badge: {
-      backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10,
-      marginBottom: 14,
+    card: {
+      width: '100%',
+      maxWidth: 400,
+      alignItems: 'center',
+      backgroundColor: colors.surfaceContainerHigh,
+      borderRadius: radius.xl,
+      padding: space.xl,
     },
-    badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
-    title: { fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', marginBottom: 8 },
-    description: { fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-    button: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 24 },
-    buttonText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.onAccent },
+    icon: {
+      width: 56, height: 56, borderRadius: radius.full, marginBottom: space.md,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tertiaryContainer,
+    },
+    title: { ...typography.headlineSmall, color: colors.onSurface, textAlign: 'center', marginTop: space.md },
+    description: { ...typography.bodyMedium, color: colors.onSurfaceVariant, textAlign: 'center', marginTop: space.sm },
+    button: { marginTop: space.xl, alignSelf: 'stretch' },
   });
 }

@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { useGarage } from '../context/GarageContext';
-import { Field, Button, ScreenHeader, ErrorText, ChipGroup } from '../components/ui';
-import { useThemedStyles, type ThemeColors } from '../theme';
+import {
+  TextField, Button, AppBar, ErrorText, ChipGroup, Screen, FormLayout, SectionHeader,
+} from '../components/ui';
+import { space, typography, useThemedStyles, type ThemeColors } from '../theme';
 import { FUEL_TYPES } from '../lib/types';
 import type { Vehicle } from '../lib/types';
+
+type FieldErrors = Partial<Record<'make' | 'model' | 'year', string>>;
 
 export default function VehicleSetupScreen({ editVehicle, onSaved, onClose }: {
   editVehicle?: Vehicle; onSaved?: () => void; onClose?: () => void;
 } = {}) {
-  const { addVehicle, updateVehicle, error, vehicles } = useGarage();
+  const { addVehicle, updateVehicle, error, clearError: clearGarageError, vehicles } = useGarage();
+  useEffect(() => { clearGarageError(); }, [clearGarageError]);
   const { styles } = useThemedStyles(makeStyles);
   const [make, setMake] = useState(editVehicle?.make ?? '');
   const [model, setModel] = useState(editVehicle?.model ?? '');
@@ -18,14 +22,25 @@ export default function VehicleSetupScreen({ editVehicle, onSaved, onClose }: {
   const [fuelType, setFuelType] = useState(editVehicle?.fuel_type ?? 'Petrol');
   const [nickname, setNickname] = useState(editVehicle?.nickname ?? '');
   const [busy, setBusy] = useState(false);
-  const [localError, setLocalError] = useState('');
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  const title = editVehicle ? 'Edit vehicle' : vehicles.length === 0 ? 'Add your first vehicle' : 'Add a vehicle';
+  const maxYear = new Date().getFullYear() + 1;
+
+  function clearError(key: keyof FieldErrors) {
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  }
 
   async function handleSave() {
-    if (!make.trim() || !model.trim()) {
-      setLocalError('Make and model are required');
-      return;
+    const next: FieldErrors = {};
+    if (!make.trim()) next.make = 'Enter the make';
+    if (!model.trim()) next.model = 'Enter the model';
+    if (year.trim()) {
+      const y = Number(year);
+      if (!Number.isInteger(y) || y < 1900 || y > maxYear) next.year = `Enter a year between 1900 and ${maxYear}`;
     }
-    setLocalError('');
+    setErrors(next);
+    if (Object.values(next).some(Boolean)) return;
     setBusy(true);
     const ok = editVehicle
       ? await updateVehicle(editVehicle.id, { make, model, year, fuelType, nickname })
@@ -35,47 +50,85 @@ export default function VehicleSetupScreen({ editVehicle, onSaved, onClose }: {
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
-    {onClose && <ScreenHeader onClose={onClose} />}
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>
-        {editVehicle ? 'Edit vehicle' : vehicles.length === 0 ? 'Add your first vehicle' : 'Add a vehicle'}
-      </Text>
-      <Text style={styles.subtitle}>Make and model are required — the rest is optional.</Text>
+    <Screen>
+      {onClose ? <AppBar onClose={onClose} /> : null}
+      <FormLayout
+        contentStyle={!onClose && styles.topSpace}
+        footer={(
+          <Button
+            title={editVehicle ? 'Save changes' : 'Save vehicle'}
+            icon="check"
+            onPress={handleSave}
+            loading={busy}
+          />
+        )}
+      >
+        <Text style={styles.title} accessibilityRole="header">{title}</Text>
+        <Text style={styles.subtitle}>Make and model are required. Everything else is optional.</Text>
 
-      <Field label="Make" placeholder="Toyota" value={make} onChangeText={setMake} />
-      <Field label="Model" placeholder="Prius" value={model} onChangeText={setModel} />
-      <Field label="Year" placeholder="2021" value={year} onChangeText={setYear} keyboardType="number-pad" />
+        <TextField
+          label="Make"
+          placeholder="Toyota"
+          value={make}
+          onChangeText={(t) => { setMake(t); clearError('make'); }}
+          autoCapitalize="words"
+          error={errors.make}
+        />
+        <TextField
+          label="Model"
+          placeholder="Prius"
+          value={model}
+          onChangeText={(t) => { setModel(t); clearError('model'); }}
+          autoCapitalize="words"
+          error={errors.model}
+        />
+        <View style={styles.row}>
+          <View style={styles.yearField}>
+            <TextField
+              label="Year"
+              placeholder="2021"
+              value={year}
+              onChangeText={(t) => { setYear(t.replace(/[^0-9]/g, '')); clearError('year'); }}
+              keyboardType="number-pad"
+              maxLength={4}
+              error={errors.year}
+            />
+          </View>
+          <View style={styles.nicknameField}>
+            <TextField
+              label="Nickname"
+              placeholder="Daily driver"
+              value={nickname}
+              onChangeText={setNickname}
+              supportingText="Optional"
+            />
+          </View>
+        </View>
 
-      <View style={styles.fieldGroup}>
-        <Text style={styles.label}>Fuel type</Text>
+        <SectionHeader title="Fuel type" />
         <ChipGroup
           options={FUEL_TYPES.map((t) => ({ value: t, label: t }))}
           value={fuelType}
           onChange={setFuelType}
+          accessibilityLabel="Fuel type"
         />
-      </View>
 
-      <Field label="Nickname (optional)" placeholder="Daily driver" value={nickname} onChangeText={setNickname} />
-
-      <ErrorText>{localError || error}</ErrorText>
-
-      <Button title={editVehicle ? 'Save Changes' : 'Save Vehicle'} variant="fill" onPress={handleSave} loading={busy} style={{ marginTop: 8 }} />
-    </ScrollView>
-    </SafeAreaView>
+        <View style={styles.errorSpace}>
+          <ErrorText>{error}</ErrorText>
+        </View>
+      </FormLayout>
+    </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 20 },
-    title: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 6 },
-    subtitle: { fontSize: 13, color: colors.muted, marginBottom: 20 },
-    fieldGroup: { marginBottom: 14, gap: 8 },
-    label: {
-      fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
-      textTransform: 'uppercase', color: colors.faint,
-    },
+    topSpace: { paddingTop: space.xl },
+    title: { ...typography.headlineMedium, color: colors.onSurface },
+    subtitle: { ...typography.bodyMedium, color: colors.onSurfaceVariant, marginTop: space.xs, marginBottom: space.xl },
+    row: { flexDirection: 'row', gap: space.md },
+    yearField: { flex: 2 },
+    nicknameField: { flex: 3 },
+    errorSpace: { marginTop: space.xl },
   });
 }

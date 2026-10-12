@@ -1,20 +1,28 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { useGarage } from '../context/GarageContext';
 import { useAccount } from '../context/AccountContext';
-import { Field, Button, ConsentNote, Card, SegmentedControl, ErrorText } from '../components/ui';
-import { useThemedStyles, type ThemeColors } from '../theme';
+import {
+  TextField, Button, ConsentNote, SegmentedButtons, ErrorText, Message, Screen, FormLayout,
+} from '../components/ui';
+import { radius, space, typography, useThemedStyles, type ThemeColors } from '../theme';
 
 type OnboardingMode = 'new' | 'existing' | 'signin';
 
 const MODE_OPTIONS: { value: OnboardingMode; label: string }[] = [
-  { value: 'new', label: 'New Garage' },
-  { value: 'existing', label: 'Have a Code' },
-  { value: 'signin', label: 'Sign In' },
+  { value: 'new', label: 'New' },
+  { value: 'existing', label: 'Use code' },
+  { value: 'signin', label: 'Sign in' },
 ];
 
+const MODE_COPY: Record<OnboardingMode, string> = {
+  new: 'Create a garage on this device. No account needed. You get a sync code to use on other devices.',
+  existing: 'Enter the sync code from another device to load that garage here.',
+  signin: 'Already linked a garage to your account on another device? Sign in to restore it.',
+};
+
 export default function OnboardingScreen() {
-  const { startNewGarage, useExistingCode, error } = useGarage();
+  const { startNewGarage, useExistingCode, error, clearError } = useGarage();
   const { sendMagicLink } = useAccount();
   const { styles } = useThemedStyles(makeStyles);
   const [mode, setMode] = useState<OnboardingMode>('new');
@@ -22,19 +30,27 @@ export default function OnboardingScreen() {
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [signinError, setSigninError] = useState('');
   const [linkSent, setLinkSent] = useState(false);
   const [sentToEmail, setSentToEmail] = useState('');
 
+  function changeMode(next: OnboardingMode) {
+    setMode(next);
+    setFieldError(null);
+    setSigninError('');
+    clearError();
+  }
+
   async function handleNew() {
-    if (!nickname.trim()) return;
+    if (!nickname.trim()) { setFieldError('Enter a nickname for your garage'); return; }
     setBusy(true);
     await startNewGarage(nickname);
     setBusy(false);
   }
 
   async function handleExisting() {
-    if (!code.trim()) return;
+    if (!code.trim()) { setFieldError('Enter your sync code'); return; }
     setBusy(true);
     await useExistingCode(code);
     setBusy(false);
@@ -42,7 +58,8 @@ export default function OnboardingScreen() {
 
   async function handleSignIn() {
     const trimmed = email.trim();
-    if (!trimmed) return;
+    if (!trimmed) { setFieldError('Enter your email'); return; }
+    if (!/^\S+@\S+\.\S+$/.test(trimmed)) { setFieldError('Enter a valid email address'); return; }
     setSigninError('');
     setBusy(true);
     const result = await sendMagicLink(trimmed);
@@ -61,105 +78,98 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-    <ScrollView
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.hero}>
-        <View style={styles.mark}>
-          <Image source={require('../../assets/icon.png')} style={styles.markImage} />
+    <Screen>
+      <FormLayout contentStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={styles.mark}>
+            <Image source={require('../../assets/icon.png')} style={styles.markImage} accessibilityIgnoresInvertColors />
+          </View>
+          <Text style={styles.title} accessibilityRole="header">Odova</Text>
+          <Text style={styles.heroSubtitle}>
+            Track fill-ups, efficiency and spend for every vehicle you own.
+          </Text>
         </View>
-        <Text style={styles.title}>Odova</Text>
-        <Text style={styles.heroSubtitle}>
-          Track fill-ups, efficiency, and spend for every vehicle you own. No account required.
-        </Text>
-      </View>
 
-      <View style={styles.tabsWrap}>
-        <SegmentedControl options={MODE_OPTIONS} value={mode} onChange={setMode} />
-      </View>
+        <SegmentedButtons options={MODE_OPTIONS} value={mode} onChange={changeMode} accessibilityLabel="How do you want to start?" />
+        <Text style={styles.modeCopy}>{MODE_COPY[mode]}</Text>
 
-      <Card style={styles.card}>
-      {mode === 'new' ? (
-        <>
-          <Field
-            label="Garage nickname"
-            placeholder="e.g. MyGarage"
-            value={nickname}
-            onChangeText={setNickname}
-            autoCapitalize="none"
-            maxLength={20}
-          />
-          <Button title="Start Tracking" variant="fill" onPress={handleNew} loading={busy} />
-        </>
-      ) : mode === 'existing' ? (
-        <>
-          <Field
-            label="Sync code"
-            placeholder="e.g. mygarage-7x4p"
-            value={code}
-            onChangeText={setCode}
-            autoCapitalize="none"
-          />
-          <Button title="Load Garage" variant="fill" onPress={handleExisting} loading={busy} />
-        </>
-      ) : linkSent ? (
-        <>
-          <Text style={styles.subtitle}>
-            Check <Text style={styles.emailHighlight}>{sentToEmail}</Text> for a sign-in link. Opening it will restore the garage linked to your account.
-          </Text>
-          <Pressable onPress={handleEditEmail}>
-            <Text style={styles.editEmail}>Wrong email? Edit and resend</Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <Text style={styles.subtitle}>
-            Already linked a garage to your account on another device? Sign in to restore it.
-          </Text>
-          <Field
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <ConsentNote />
-          <Button title="Send Magic Link" variant="fill" onPress={handleSignIn} loading={busy} />
-          <ErrorText>{signinError}</ErrorText>
-        </>
-      )}
+        {mode === 'new' ? (
+          <>
+            <TextField
+              label="Garage nickname"
+              placeholder="e.g. MyGarage"
+              value={nickname}
+              onChangeText={(t) => { setNickname(t); setFieldError(null); }}
+              autoCapitalize="none"
+              maxLength={20}
+              returnKeyType="go"
+              onSubmitEditing={handleNew}
+              error={fieldError}
+              supportingText={`${nickname.length}/20`}
+            />
+            <Button title="Start tracking" onPress={handleNew} loading={busy} />
+          </>
+        ) : mode === 'existing' ? (
+          <>
+            <TextField
+              label="Sync code"
+              placeholder="e.g. mygarage-7x4p"
+              value={code}
+              onChangeText={(t) => { setCode(t); setFieldError(null); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={handleExisting}
+              error={fieldError}
+            />
+            <Button title="Load garage" onPress={handleExisting} loading={busy} />
+          </>
+        ) : linkSent ? (
+          <>
+            <Message tone="success">{`Check ${sentToEmail} for a sign-in link. Opening it restores the garage linked to your account.`}</Message>
+            <Button title="Use a different email" variant="text" onPress={handleEditEmail} />
+          </>
+        ) : (
+          <>
+            <TextField
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={(t) => { setEmail(t); setFieldError(null); }}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              returnKeyType="send"
+              onSubmitEditing={handleSignIn}
+              error={fieldError}
+            />
+            <ConsentNote />
+            <ErrorText>{signinError}</ErrorText>
+            <Button title="Send magic link" icon="mail" onPress={handleSignIn} loading={busy} />
+          </>
+        )}
 
-      <ErrorText>{error}</ErrorText>
-      </Card>
-    </ScrollView>
-    </KeyboardAvoidingView>
+        <View style={styles.errorSpace}>
+          <ErrorText>{error}</ErrorText>
+        </View>
+      </FormLayout>
+    </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-    hero: { alignItems: 'center', marginBottom: 32 },
+    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: space.xl },
+    hero: { alignItems: 'center', marginBottom: space.xxl },
     mark: {
-      width: 72, height: 72, borderRadius: 20, overflow: 'hidden',
-      marginBottom: 16,
-      shadowColor: colors.accent, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+      width: 88, height: 88, borderRadius: radius.xl, overflow: 'hidden', marginBottom: space.lg,
+      backgroundColor: colors.primaryContainer,
     },
     markImage: { width: '100%', height: '100%' },
-    title: { fontSize: 28, fontWeight: '800', color: colors.text, marginBottom: 8, textAlign: 'center' },
-    heroSubtitle: { fontSize: 14, color: colors.muted, lineHeight: 20, textAlign: 'center' },
-    subtitle: { fontSize: 13, color: colors.muted, marginBottom: 14, lineHeight: 19 },
-    tabsWrap: { marginBottom: 20 },
-    card: { borderRadius: 14, padding: 20 },
-    emailHighlight: { color: colors.text, fontWeight: '700' },
-    editEmail: { color: colors.accent, fontSize: 13, fontWeight: '700', marginTop: 4 },
+    title: { ...typography.displaySmall, color: colors.onSurface, textAlign: 'center' },
+    heroSubtitle: { ...typography.bodyLarge, color: colors.onSurfaceVariant, textAlign: 'center', marginTop: space.sm },
+    modeCopy: { ...typography.bodyMedium, color: colors.onSurfaceVariant, marginTop: space.lg, marginBottom: space.xl },
+    errorSpace: { marginTop: space.lg },
   });
 }

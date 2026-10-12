@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
@@ -14,31 +13,39 @@ import MaintenanceScreen from '../screens/MaintenanceScreen';
 import AddReminderScreen from '../screens/AddReminderScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import { DashboardSkeleton } from '../components/Skeleton';
-import { Button } from '../components/ui';
-import { useColors, useThemeMode, useThemedStyles, type ThemeColors } from '../theme';
+import { Button, Screen } from '../components/ui';
+import { Icon } from '../components/Icon';
+import { radius, space, typography, useColors, useThemeMode, useThemedStyles, type ThemeColors } from '../theme';
 
 function BootErrorScreen() {
   const { error, retryBoot } = useGarage();
-  const { styles } = useThemedStyles(makeErrorStyles);
+  const { colors, styles } = useThemedStyles(makeErrorStyles);
   return (
-    <SafeAreaView style={styles.root}>
+    <Screen>
       <View style={styles.content}>
-        <Text style={styles.title}>Couldn't load your garage</Text>
+        <View style={styles.icon}>
+          <Icon name="info" size={32} color={colors.onErrorContainer} />
+        </View>
+        <Text style={styles.title} accessibilityRole="header">Couldn't load your garage</Text>
         <Text style={styles.message}>
           {error ?? 'Something went wrong. Please check your connection and try again.'}
         </Text>
-        <Button title="Retry" variant="fill" onPress={retryBoot} style={{ marginTop: 16 }} />
+        <Button title="Try again" icon="sync" onPress={retryBoot} style={styles.button} />
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 function makeErrorStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-    title: { fontSize: 19, fontWeight: '800', color: colors.text, marginBottom: 10, textAlign: 'center' },
-    message: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+    content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xxl },
+    icon: {
+      width: 64, height: 64, borderRadius: radius.full, marginBottom: space.lg,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: colors.errorContainer,
+    },
+    title: { ...typography.headlineSmall, color: colors.onSurface, marginBottom: space.sm, textAlign: 'center' },
+    message: { ...typography.bodyMedium, color: colors.onSurfaceVariant, textAlign: 'center' },
+    button: { marginTop: space.xl },
   });
 }
 
@@ -56,24 +63,35 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Android: Material-style fade-through from the bottom. iOS: the native modal sheet.
+const modalOptions = Platform.OS === 'android'
+  ? { presentation: 'modal' as const, animation: 'fade_from_bottom' as const }
+  : { presentation: 'modal' as const };
+
 export default function RootNavigator() {
   const { step } = useGarage();
   const colors = useColors();
   const { resolvedScheme } = useThemeMode();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const navTheme = useMemo(() => {
     const base = resolvedScheme === 'light' ? DefaultTheme : DarkTheme;
     return {
       ...base,
-      colors: { ...base.colors, background: colors.bg, card: colors.surface, border: colors.border, text: colors.text, primary: colors.accent },
+      colors: {
+        ...base.colors,
+        background: colors.surface,
+        card: colors.surfaceContainer,
+        border: colors.outlineVariant,
+        text: colors.onSurface,
+        primary: colors.primary,
+      },
     };
   }, [colors, resolvedScheme]);
 
   if (step === 'loading') {
     return (
-      <View style={styles.loading}>
+      <Screen>
         <DashboardSkeleton />
-      </View>
+      </Screen>
     );
   }
 
@@ -83,7 +101,13 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.surface },
+          animation: 'fade',
+        }}
+      >
         {step === 'onboarding' && (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         )}
@@ -93,21 +117,15 @@ export default function RootNavigator() {
         {step === 'main' && (
           <>
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
-            <Stack.Screen name="AddFill" component={AddFillScreen} options={{ presentation: 'modal' }} />
-            <Stack.Screen name="AddVehicle" component={AddVehicleScreen} options={{ presentation: 'modal' }} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
-            <Stack.Screen name="Maintenance" component={MaintenanceScreen} options={{ presentation: 'modal' }} />
-            <Stack.Screen name="AddReminder" component={AddReminderScreen} options={{ presentation: 'modal' }} />
-            <Stack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal' }} />
+            <Stack.Screen name="AddFill" component={AddFillScreen} options={modalOptions} />
+            <Stack.Screen name="AddVehicle" component={AddVehicleScreen} options={modalOptions} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={modalOptions} />
+            <Stack.Screen name="Maintenance" component={MaintenanceScreen} options={modalOptions} />
+            <Stack.Screen name="AddReminder" component={AddReminderScreen} options={modalOptions} />
+            <Stack.Screen name="Paywall" component={PaywallScreen} options={modalOptions} />
           </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
-}
-
-function makeStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    loading: { flex: 1, backgroundColor: colors.bg },
-  });
 }

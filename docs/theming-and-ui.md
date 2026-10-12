@@ -1,70 +1,137 @@
 # Theming and shared UI
 
+The app follows **Material Design 3** (tonal surfaces, M3 type scale, pill
+buttons, outlined text fields) on both platforms, with platform-appropriate
+touch feedback: ripples on Android, a state-layer overlay on iOS.
+
 ## Theme system
 
-`src/theme.tsx` defines two full color palettes (`dark`, `light`) against a
-single `ThemeColors` interface, so every screen reads semantic tokens
-(`colors.bg`, `colors.surface`, `colors.accent`, ...) rather than hardcoded
-hex values — a screen never needs to know which palette is active.
+`src/theme.tsx` defines two full palettes (`light`, `dark`) against a single
+`ThemeColors` interface of **M3 color roles**: `primary` / `onPrimary`,
+`primaryContainer` / `onPrimaryContainer`, `secondaryContainer`,
+`tertiary*` (the amber Pro accent), `error*`, `success*`, `warning`,
+`surface` plus the `surfaceContainerLowest` through `surfaceContainerHighest`
+tonal ladder, `onSurface` / `onSurfaceVariant`, `outline` / `outlineVariant`,
+`inverseSurface`, `scrim`, and the `stateLayer*` press overlays. Screens
+only read roles. They never use hex values and never need to know which
+palette is active.
+
+Alongside colors the theme exports three scales. Use these rather than
+hand-picking numbers:
+- `typography`: the M3 type scale (`displaySmall`, `headline*`, `title*`,
+  `body*`, `label*`). Spread it into a style:
+  `{ ...typography.titleMedium, color: colors.onSurface }`.
+- `radius`: `xs 4`, `sm 8`, `md 12`, `lg 16`, `xl 28`, `full`.
+- `space`: `xs 4`, `sm 8`, `md 12`, `lg 16`, `xl 24`, `xxl 32`.
 
 `ThemeModeProvider` tracks a **user-selectable mode** (`'light' | 'dark' |
-'system'`), persisted via AsyncStorage so it survives app restarts, resolved
-against the OS setting only when `'system'` is selected. This sits on top of
-(not instead of) the OS-driven `useColorScheme()`, so picking "Light"
-explicitly overrides a phone set to system dark mode, immediately, without
-restarting the app. The control lives in Settings → Appearance.
+'system'`), persisted via AsyncStorage, resolved against the OS setting only
+when `'system'` is selected. Four things consume the *resolved* scheme:
+`useColors()`, `RootNavigator`'s React Navigation theme, `App.tsx`'s
+`<StatusBar>` icon style, and `App.tsx`'s `SystemUI.setBackgroundColorAsync`
+call. The last one keeps the root view the same color as the screens, so
+modal transitions don't flash white in dark mode.
 
-Three things had to consume the *resolved* scheme, not just the OS one, for
-the override to actually work everywhere:
-- `useColors()` — the color values every screen renders with.
-- `RootNavigator`'s React Navigation theme (nav bar chrome, header colors).
-- `App.tsx`'s `<StatusBar>` icon style — otherwise picking "Light" while the
-  OS is in dark mode would render a light background with light (OS-driven)
-  status bar icons, invisible against it.
+`useThemedStyles(makeStyles)` returns `{ colors, styles }`, so a screen
+doesn't have to call `useColors()` and memoize its styles separately.
 
-`useThemedStyles(makeStyles)` collapses the
-`const colors = useColors(); const styles = useMemo(() => makeStyles(colors), [colors]);`
-pair that used to be repeated at the top of every single screen/component
-into one call — a mechanical de-duplication, not a behavior change.
+## Icons (`src/components/Icon.tsx`)
+
+Icons are Material Symbols paths drawn with `react-native-svg`, which is
+already a dependency, so no icon font or new package is needed. To add an
+icon, add its 24×24 path to the `PATHS` map. `IconName` is derived from that
+map, so a typo is a type error. Icons are hidden from accessibility, and the
+control around them carries the label.
 
 ## Shared components (`src/components/ui.tsx`)
 
-These came out of an audit that found the same handful of UI patterns
-re-implemented with near-identical (sometimes byte-for-byte identical) style
-objects across several screens. Extracting them was about removing that
-duplication, not adding new capability:
+Layout:
+- **`Screen`**: a `SafeAreaView` that insets the top and sides only (see
+  "System navigation bar" below).
+- **`AppBar`**: the M3 top app bar. Pass `onClose` for a leading ✕ on modal
+  screens, `actions` for trailing `IconButton`s, `large` for a headline-sized
+  title, and `onTitlePress` / `titleAccessory` for a tappable title (the
+  dashboard's vehicle switcher).
+- **`FormLayout`**: a keyboard-avoiding scroll view with an optional sticky
+  `footer`, used by every form screen. The footer is rendered in a
+  **`BottomBar`**, which handles the navigation-bar inset and drops it while
+  the keyboard is open.
+- **`Fab`**: an extended floating action button. It springs in on mount, and
+  setting `extended={false}` collapses it to an icon (the dashboard does this
+  on scroll down).
 
-- **`ScreenHeader`** — the title + close (✕) row at the top of modal-style
-  screens (Settings, AddFill, AddReminder, Maintenance, Paywall). Omit
-  `title` for an X-only header (Paywall, the Add-Vehicle modal). Replaced
-  what used to be a bottom "Close"/"Cancel" text link on every one of these
-  screens.
-- **`SegmentedControl`** — a single-row, joined-border control for a small
-  (2–3 option) mutually-exclusive choice: Onboarding's mode tabs, Settings'
-  theme mode. Renders the active option filled solid with `colors.accent`.
-- **`ChipGroup`** — a wrapping row of individually-bordered pills, for a
-  larger option set (currency, fuel type) or one-shot tap-to-fill
-  suggestions (the maintenance-reminder presets) — pass no `value` and no
-  pill ever shows as selected.
-- **`Card`** — the bordered surface container used for most grouped content;
-  accepts a `style` override for the rare screen that needs different
-  padding or a border radius.
-- **`ErrorText`** — a `Text` that renders nothing when its child is falsy,
-  replacing the `{error ? <Text style={styles.error}>{error}</Text> : null}`
-  pattern that was duplicated with an identical style object across four
-  screens.
-- **`CloseButton`** — the circular ✕ button `ScreenHeader` uses internally;
-  exported separately for the one case (`VehicleSetupScreen`'s optional
-  `onClose` prop) that needs it outside a full header row.
+Actions:
+- **`Button`**: `filled` (default), `tonal`, `outlined`, `text`, `danger`.
+  It is pill-shaped, at least 48dp tall, and supports an optional `icon` and
+  a `loading` spinner.
+- **`IconButton`**: `standard`, `tonal`, `filled`, with a 48dp touch target
+  and an optional `badge` (`'lock'` for Pro-gated actions, `'dot'` for
+  status).
+- **`Touchable`**: the base pressable that everything above builds on.
+  Android gets a ripple, and iOS gets a state-layer overlay.
 
-## A color-contrast rule worth knowing before adding a new filled surface
+Inputs:
+- **`TextField`**: an M3 outlined field with an animated floating label, a
+  `suffix` (units), `supportingText`, and an `error` that turns the outline
+  red and replaces the supporting text. Pass `background` when the field
+  sits on a tinted container, so the floating label's notch matches.
+- **`DateField`**: the same shell, opening the native date picker
+  (`DateTimePickerAndroid` on Android, an inline picker in a bottom sheet on
+  iOS). Date strings round-trip through `src/lib/dates.ts`, which is
+  timezone-safe.
+- **`SegmentedButtons`**: 2–3 mutually exclusive options. The selected
+  segment shows a check icon.
+- **`ChipGroup`**: wrapping filter chips (currency, fuel type, chart mode).
+  Pass no `value` to get suggestion chips (the reminder presets).
+- **`SwitchItem`**: a full-row switch. The whole row is the touch target.
 
-Text sitting on top of `colors.accent`-filled elements (fill-variant buttons,
-the FAB, the segmented control's active state) uses `colors.onAccent`
-(white) in both themes — not `colors.text`, which flips dark/light per theme
-and would fail contrast against the always-blue accent fill. Text on
-`colors.amber`-filled elements (the "PRO" badge) stays hardcoded dark
-(`#0b0f19`) in both themes for the same reason, in the other direction —
-amber is bright enough that dark text is the correct contrast choice
-regardless of theme. If you add a new accent- or amber-filled surface, follow
-whichever of these two patterns matches; don't default to `colors.text`.
+Content:
+- **`ListGroup`** and **`ListItem`**: M3 lists in a rounded tonal group, with
+  a leading icon (tinted by `leadingTone`), headline, supporting text, a
+  trailing element, and an optional `destructive` style.
+- **`SectionHeader`**, **`Card`** (`neutral`, `primary`, or `tertiary`
+  tone), **`Badge`**.
+- **`EmptyState`**: an icon, title, body and optional action, used whenever a
+  list has no data.
+- **`Message`** (`error`, `success`, `info`) and **`ErrorText`** (the error
+  variant, which renders nothing when given no content). Both are announced
+  to screen readers as alerts.
+
+## Motion
+
+All animation uses React Native's `Animated` API, because Reanimated is not
+a dependency. Motion is kept short and functional: the floating label,
+segmented and chip selection, the FAB entrance and collapse, the dashboard's
+vehicle menu (scale and fade), the chart crossfade when switching modes, and
+the skeleton pulse. Modal routes use `fade_from_bottom` on Android and the
+native sheet on iOS.
+
+## System navigation bar
+
+Android draws the app edge-to-edge, and the gesture or 3-button bar can
+report a bottom inset of 0 while still covering the bottom of the screen.
+`useBottomInset()` (`src/theme.tsx`) therefore uses the real inset, with a
+48dp floor on Android. `Screen` only insets the top and sides. Scroll
+content uses `useScrollBottom()`, `BottomBar` pads itself, and the
+dashboard's floating ad slot and FAB are positioned with `useBottomInset()`.
+As a result, lists scroll behind the transparent bar, but nothing
+interactive ever sits under it. `SafeAreaProvider` receives
+`initialWindowMetrics` so the inset exists on the first frame.
+
+## Keyboard
+
+Form screens use `FormLayout` (`KeyboardAvoidingView` with
+`behavior="padding"`, plus `keyboardShouldPersistTaps="handled"`), and
+Settings wraps its scroll view the same way for the sign-in email field.
+Validation errors are shown on the field they belong to, not as one
+banner.
+
+## Color-contrast rule for filled surfaces
+
+Text on a filled surface always uses the matching **`on*` role**:
+`onPrimary` on `primary`, `onPrimaryContainer` on `primaryContainer`,
+`onTertiaryContainer` on `tertiaryContainer` (the amber PRO badge), and so on.
+Never use `onSurface` there. In dark mode `primary` is a light blue and
+`onPrimary` is a dark navy, which is the reverse of light mode. A hardcoded
+white or a theme-flipping text color will fail contrast in one of the two
+themes. If you add a new filled surface, pair it with its `on*` role.

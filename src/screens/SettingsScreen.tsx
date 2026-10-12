@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Share } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Alert, Share, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
@@ -13,8 +12,12 @@ import {
   type UnitSystem, distanceUnitLabel, volumeUnitLabel, efficiencyUnitLabel, costPerDistanceUnitLabel,
   kmToDisplayDistance, litresToDisplayVolume, pricePerLitreToDisplay, costPerKmToDisplay, kmplToMpg,
 } from '../lib/units';
-import { Button, Field, ConsentNote, ScreenHeader, ErrorText, SegmentedControl, ChipGroup, Card } from '../components/ui';
-import { useThemedStyles, useThemeMode, type ThemeColors, type ThemeMode } from '../theme';
+import {
+  Button, TextField, ConsentNote, AppBar, Message, SegmentedButtons, ChipGroup, Card, Screen,
+  useScrollBottom, ListGroup, ListItem, SectionHeader, IconButton, Badge,
+} from '../components/ui';
+import { Icon } from '../components/Icon';
+import { space, typography, useThemedStyles, useThemeMode, type ThemeColors, type ThemeMode } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -40,6 +43,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const { session, sendMagicLink, signOut, deleteAccount } = useAccount();
   const { mode, setMode } = useThemeMode();
   const { colors, styles } = useThemedStyles(makeStyles);
+  const scrollBottom = useScrollBottom();
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [accountDeleteBusy, setAccountDeleteBusy] = useState(false);
@@ -241,165 +245,199 @@ export default function SettingsScreen({ navigation }: Props) {
     );
   }
 
+  const claimSupporting: Record<ClaimUiState, string> = {
+    idle: 'Signed in',
+    loading: 'Checking garage link…',
+    owned: 'This garage is linked to your account',
+    claimed_other: 'This sync code is linked to a different account',
+    unclaimed: 'This garage isn’t linked to your account yet',
+    error: 'Couldn’t check the garage link',
+  };
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
-    <ScreenHeader title="Settings" onClose={() => navigation.goBack()} />
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.sectionLabel}>Appearance</Text>
-      <SegmentedControl options={THEME_OPTIONS} value={mode} onChange={setMode} />
-
-      <Text style={styles.sectionLabel}>Plan</Text>
-      <Card style={styles.card}>
-        {isPro ? (
-          <>
-            <Text style={styles.planStatusPro}>✓ Odova Pro</Text>
-            <Text style={styles.hint}>Unlimited vehicles, maintenance reminders, cloud sync, CSV export, no ads.</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.planStatusFree}>Free plan</Text>
-            <Text style={styles.hint}>1 vehicle, local storage only. Upgrade for maintenance reminders, unlimited vehicles, and more.</Text>
-            <Pressable onPress={() => navigation.navigate('Paywall')} style={styles.upgradeBtn}>
-              <Text style={styles.upgradeBtnText}>Upgrade to Pro</Text>
-            </Pressable>
-          </>
-        )}
-        {__DEV__ && (
-          <Pressable
-            onPress={() => (isPro ? devClearPro() : purchasePro())}
-            style={styles.devToggle}
-          >
-            <Text style={styles.devToggleText}>
-              DEV: {isPro ? 'Clear Pro entitlement' : 'Simulate Pro purchase'}
+    <Screen>
+      <AppBar title="Settings" onClose={() => navigation.goBack()} />
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: scrollBottom }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
+        <Card tone={isPro ? 'neutral' : 'primary'} style={styles.planCard}>
+          <View style={styles.planHeader}>
+            <Icon name={isPro ? 'checkCircle' : 'star'} size={24} color={isPro ? colors.success : colors.onPrimaryContainer} />
+            <Text style={[styles.planTitle, { color: isPro ? colors.onSurface : colors.onPrimaryContainer }]}>
+              {isPro ? 'Odova Pro' : 'Free plan'}
             </Text>
-          </Pressable>
-        )}
-      </Card>
+            {isPro ? <Badge label="ACTIVE" tone="success" /> : null}
+          </View>
+          <Text style={[styles.planBody, { color: isPro ? colors.onSurfaceVariant : colors.onPrimaryContainer }]}>
+            {isPro
+              ? 'Unlimited vehicles, maintenance reminders, CSV export and no ads.'
+              : '1 vehicle, synced with your sync code. Upgrade for maintenance reminders, unlimited vehicles and more.'}
+          </Text>
+          {!isPro ? (
+            <Button title="Upgrade to Pro" onPress={() => navigation.navigate('Paywall')} style={styles.planButton} />
+          ) : null}
+          {__DEV__ ? (
+            <Button
+              title={isPro ? 'DEV: Clear Pro entitlement' : 'DEV: Simulate Pro purchase'}
+              variant="text"
+              onPress={() => void (isPro ? devClearPro() : purchasePro())}
+              style={styles.devButton}
+            />
+          ) : null}
+        </Card>
 
-      <Text style={styles.sectionLabel}>Sync Code</Text>
-      <Card style={styles.card}>
-        <Text style={styles.code}>{userCode ?? '—'}</Text>
-        <Text style={styles.hint}>
-          Save this code to load your garage on another device — no account needed.
-        </Text>
-        <Pressable onPress={copyCode} style={styles.copyBtn}>
-          <Text style={styles.copyBtnText}>{copied ? 'Copied!' : 'Copy Code'}</Text>
-        </Pressable>
-      </Card>
+        <SectionHeader title="Appearance" />
+        <SegmentedButtons options={THEME_OPTIONS} value={mode} onChange={setMode} accessibilityLabel="Theme" />
 
-      <Text style={styles.sectionLabel}>Account</Text>
-      <Card style={styles.card}>
+        <SectionHeader title="Sync code" />
+        <ListGroup>
+          <ListItem
+            leadingIcon="key"
+            leadingTone="primary"
+            headline={userCode ?? '—'}
+            supporting={copied ? 'Copied to clipboard' : 'Use this code to load your garage on another device'}
+            onPress={copyCode}
+            accessibilityLabel={`Sync code ${userCode ?? ''}`}
+            accessibilityHint="Copies the code to the clipboard"
+            trailing={(
+              <IconButton
+                icon={copied ? 'check' : 'copy'}
+                accessibilityLabel={copied ? 'Copied' : 'Copy sync code'}
+                color={copied ? colors.success : undefined}
+                onPress={copyCode}
+              />
+            )}
+          />
+        </ListGroup>
+
+        <SectionHeader title="Account" />
         {!session ? (
           magicLinkSent ? (
             <>
-              <Text style={styles.hint}>
-                Check {email} for a sign-in link. Optional — your sync code keeps working without it.
-              </Text>
-              <Pressable onPress={() => { setMagicLinkSent(false); setAuthError(null); }}>
-                <Text style={styles.editEmailLink}>Wrong email? Edit and resend</Text>
-              </Pressable>
+              <Message tone="success">{`Check ${email} for a sign-in link. Your sync code keeps working either way.`}</Message>
+              <Button
+                title="Use a different email"
+                variant="text"
+                onPress={() => { setMagicLinkSent(false); setAuthError(null); }}
+                style={styles.alignStart}
+              />
             </>
           ) : (
-            <>
-              <Text style={styles.hint}>
-                Optional: sign in to link this garage to your account, so it restores on a new
-                device by logging in instead of retyping the code.
+            <Card>
+              <Text style={styles.cardBody}>
+                Optional. Sign in to link this garage to your account so it restores on a new device without the code.
               </Text>
-              <View style={{ marginTop: 10 }}>
-                <Field
-                  label="Email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
-              </View>
+              <TextField
+                label="Email"
+                placeholder="you@example.com"
+                value={email}
+                onChangeText={(t) => { setEmail(t); setAuthError(null); }}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                returnKeyType="send"
+                onSubmitEditing={handleSendMagicLink}
+                background={colors.surfaceContainer}
+                error={authError}
+              />
               <ConsentNote />
-              <ErrorText>{authError}</ErrorText>
-              <Button title="Send Magic Link" onPress={handleSendMagicLink} loading={authBusy} />
-            </>
+              <Button title="Send magic link" icon="mail" variant="tonal" onPress={handleSendMagicLink} loading={authBusy} />
+            </Card>
           )
         ) : (
           <>
-            <Text style={styles.code}>{session.user.email}</Text>
-            {claimState === 'owned' && (
-              <Text style={[styles.hint, { color: colors.green }]}>
-                This garage is linked to your account.
-              </Text>
-            )}
-            {claimState === 'claimed_other' && (
-              <Text style={[styles.hint, { color: colors.red }]}>
-                This sync code is linked to a different account.
-              </Text>
-            )}
-            {claimState === 'unclaimed' && (
-              <Text style={styles.hint}>Link this garage to your account?</Text>
-            )}
-            {claimMessage && <Text style={styles.hint}>{claimMessage}</Text>}
-
-            <View style={styles.accountActions}>
-              {claimState === 'owned' && (
-                <Button
-                  title={claimBusy ? 'Unlinking…' : 'Unlink From Account'}
-                  variant="outline" onPress={handleUnlink} disabled={claimBusy}
-                />
-              )}
-              {claimState === 'unclaimed' && (
-                <Button
-                  title={claimBusy ? 'Linking…' : 'Link This Garage'}
-                  variant="fill" onPress={handleClaim} disabled={claimBusy}
-                />
-              )}
-              <Button title="Restore Garage From Account" variant="outline" onPress={handleRestoreFromAccount} />
-              <Button title="Sign Out" variant="outline" onPress={() => void signOut()} />
-              <Button
-                title={accountDeleteBusy ? 'Deleting…' : 'Delete Account'}
-                variant="danger" onPress={confirmDeleteAccount} disabled={accountDeleteBusy}
+            <ListGroup>
+              <ListItem
+                leadingIcon="person"
+                leadingTone={claimState === 'owned' ? 'success' : claimState === 'claimed_other' ? 'error' : 'primary'}
+                headline={session.user.email ?? 'Signed in'}
+                supporting={claimSupporting[claimState]}
+                trailing={claimState === 'loading' ? <ActivityIndicator color={colors.primary} /> : undefined}
               />
-            </View>
+              {claimState === 'unclaimed' ? (
+                <ListItem
+                  leadingIcon="link"
+                  headline={claimBusy ? 'Linking…' : 'Link this garage'}
+                  onPress={handleClaim}
+                  disabled={claimBusy}
+                />
+              ) : null}
+              {claimState === 'owned' ? (
+                <ListItem
+                  leadingIcon="link"
+                  headline={claimBusy ? 'Unlinking…' : 'Unlink from account'}
+                  onPress={handleUnlink}
+                  disabled={claimBusy}
+                />
+              ) : null}
+              <ListItem leadingIcon="history" headline="Restore garage from account" onPress={handleRestoreFromAccount} />
+              <ListItem leadingIcon="logout" headline="Sign out" onPress={() => void signOut()} />
+              <ListItem
+                leadingIcon="delete"
+                headline={accountDeleteBusy ? 'Deleting…' : 'Delete account'}
+                destructive
+                onPress={confirmDeleteAccount}
+                disabled={accountDeleteBusy}
+              />
+            </ListGroup>
+            {claimMessage ? <View style={styles.messageSpace}><Message tone="info">{claimMessage}</Message></View> : null}
           </>
         )}
-      </Card>
 
-      <Text style={styles.sectionLabel}>Currency</Text>
-      <ChipGroup
-        options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.symbol} ${c.code}` }))}
-        value={currencyCode}
-        onChange={changeCurrency}
-      />
+        <SectionHeader title="Currency" />
+        <ChipGroup
+          options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.symbol} ${c.code}` }))}
+          value={currencyCode}
+          onChange={changeCurrency}
+          accessibilityLabel="Currency"
+        />
 
-      <Text style={styles.sectionLabel}>Units</Text>
-      <SegmentedControl options={UNIT_OPTIONS} value={unitSystem} onChange={changeUnitSystem} />
+        <SectionHeader title="Units" />
+        <SegmentedButtons options={UNIT_OPTIONS} value={unitSystem} onChange={changeUnitSystem} accessibilityLabel="Units" />
 
-      <Text style={styles.sectionLabel}>Data</Text>
-      <Button title={isPro ? 'Export CSV' : 'Export CSV 🔒 Pro'} onPress={exportCSV} loading={exporting} style={{ marginBottom: 10 }} />
-      <Button title="Delete All Garage Data" variant="danger" onPress={confirmDeleteAll} />
-    </ScrollView>
-    </SafeAreaView>
+        <SectionHeader title="Data" />
+        <ListGroup>
+          <ListItem
+            leadingIcon="download"
+            leadingTone="primary"
+            headline={exporting ? 'Preparing export…' : 'Export CSV'}
+            supporting="Fill-ups and reminders for every vehicle"
+            onPress={exportCSV}
+            disabled={exporting}
+            trailing={exporting
+              ? <ActivityIndicator color={colors.primary} />
+              : !isPro ? <Badge label="PRO" /> : undefined}
+          />
+          <ListItem
+            leadingIcon="delete"
+            headline="Delete all garage data"
+            supporting="Vehicles, fill-ups and reminders"
+            destructive
+            onPress={confirmDeleteAll}
+          />
+        </ListGroup>
+      </ScrollView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 20, paddingTop: 12 },
-    sectionLabel: {
-      fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
-      color: colors.faint, marginBottom: 8, marginTop: 18,
-    },
-    card: { padding: 14 },
-    planStatusPro: { fontSize: 16, fontWeight: '800', color: colors.green },
-    planStatusFree: { fontSize: 16, fontWeight: '800', color: colors.text },
-    upgradeBtn: { marginTop: 12, backgroundColor: colors.accent, paddingVertical: 10, alignItems: 'center' },
-    upgradeBtnText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: colors.onAccent },
-    devToggle: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSoft },
-    devToggleText: { fontSize: 11, color: colors.faint, fontWeight: '600' },
-    code: { fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
-    hint: { fontSize: 12, color: colors.faint, marginTop: 8, lineHeight: 17 },
-    copyBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.amber, paddingVertical: 8, alignItems: 'center' },
-    copyBtnText: { color: colors.amber, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-    accountActions: { gap: 10, marginTop: 14 },
-    editEmailLink: { color: colors.accent, fontSize: 13, fontWeight: '700', marginTop: 8 },
+    flex: { flex: 1 },
+    content: { paddingHorizontal: space.lg, paddingTop: space.sm },
+    planCard: { paddingVertical: space.xl },
+    planHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+    planTitle: { ...typography.titleLarge, flexShrink: 1 },
+    planBody: { ...typography.bodyMedium, marginTop: space.sm },
+    planButton: { marginTop: space.lg },
+    devButton: { marginTop: space.sm, alignSelf: 'flex-start' },
+    cardBody: { ...typography.bodyMedium, color: colors.onSurfaceVariant, marginBottom: space.lg },
+    alignStart: { alignSelf: 'flex-start' },
+    messageSpace: { marginTop: space.md },
   });
 }

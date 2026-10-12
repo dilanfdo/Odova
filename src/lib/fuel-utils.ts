@@ -16,12 +16,28 @@ export interface FillUp {
 
 export interface FillStats {
   fill: FillUp;
+  /** km driven since the previous full fill (the baseline this measurement runs from). */
   distance: number | null;
   l100km: number | null;
   kmpl: number | null;
   totalCost: number;
+  /** Cost of the fuel burned over `distance` / `distance`. */
   costPerKm: number | null;
+  /** Litres burned over `distance`: this fill plus any partial fills since the previous full fill. */
+  consumedLitres: number | null;
+  /** Cost of those litres. */
+  consumedCost: number | null;
+  /** True for the fill that has no baseline to measure from (the first one, or the first full fill). */
   isFirst: boolean;
+}
+
+export interface EfficiencySummary {
+  distance: number;
+  litres: number;
+  cost: number;
+  kmpl: number;
+  l100km: number;
+  costPerKm: number;
 }
 
 // ── Sync code helpers ──────────────────────────────────────────────────────────
@@ -96,10 +112,18 @@ export function friendlyError(raw: string): string {
 // ── Core efficiency calculations ───────────────────────────────────────────────
 
 /**
- * Compute derived statistics for a sorted list of fill-ups.
- * - First fill is always isFirst=true with no efficiency data (no previous odometer).
- * - Partial fills are flagged but not used for efficiency calculations.
- * - Negative or zero distance between fills is treated as invalid.
+ * Compute derived statistics for a list of fill-ups (sorted by date, then odometer).
+ *
+ * Efficiency is measured full-to-full: the baseline is the most recent *full*
+ * fill, and the litres burned since then are this fill plus every partial fill
+ * in between (a partial fill's litres were burned too, we just don't know the
+ * tank level at that point).
+ * - The first fill, or the first full fill if the first is partial, is the
+ *   baseline and has no efficiency data.
+ * - Partial fills carry no efficiency of their own; their litres roll into the
+ *   next full fill.
+ * - Non-positive distance between baseline and fill is treated as invalid, and
+ *   the baseline moves on to that fill.
  */
 export function computeStats(fills: FillUp[]): FillStats[] {
   const sorted = [...fills].sort(
@@ -108,26 +132,108 @@ export function computeStats(fills: FillUp[]): FillStats[] {
       a.odometer - b.odometer,
   );
 
+  let baselineOdometer: number | null = null;
+  let pendingLitres = 0;
+  let pendingCost = 0;
+
   return sorted.map((fill, i) => {
     const totalCost = fill.litres * fill.price_per_litre;
-    if (i === 0) {
-      return { fill, distance: null, l100km: null, kmpl: null, totalCost, costPerKm: null, isFirst: true };
-    }
+    const none: FillStats = {
+      fill, distance: null, l100km: null, kmpl: null, totalCost,
+      costPerKm: null, consumedLitres: null, consumedCost: null, isFirst: i === 0,
+    };
+
     if (fill.is_partial) {
-      return { fill, distance: null, l100km: null, kmpl: null, totalCost, costPerKm: null, isFirst: false };
+      if (baselineOdometer !== null) {
+        pendingLitres += fill.litres;
+        pendingCost += totalCost;
+      }
+      return none;
     }
-    const dist = fill.odometer - sorted[i - 1].odometer;
-    if (dist <= 0 || fill.litres <= 0) {
-      return { fill, distance: null, l100km: null, kmpl: null, totalCost, costPerKm: null, isFirst: false };
+
+    if (baselineOdometer === null) {
+      baselineOdometer = fill.odometer;
+      pendingLitres = 0;
+      pendingCost = 0;
+      return { ...none, isFirst: true };
     }
+
+    const dist = fill.odometer - baselineOdometer;
+    const litres = pendingLitres + fill.litres;
+    const cost = pendingCost + totalCost;
+    baselineOdometer = fill.odometer;
+    pendingLitres = 0;
+    pendingCost = 0;
+
+    if (dist <= 0 || litres <= 0) return none;
+
     return {
       fill,
       distance: dist,
-      l100km: (fill.litres / dist) * 100,
-      kmpl: dist / fill.litres,
+      l100km: (litres / dist) * 100,
+      kmpl: dist / litres,
       totalCost,
-      costPerKm: totalCost / dist,
+      costPerKm: cost / dist,
+      consumedLitres: litres,
+      consumedCost: cost,
       isFirst: false,
     };
   });
+}
+
+/**
+ * Overall efficiency across every measured interval: total distance over total
+ * litres. Averaging per-fill ratios would weight a 200 km interval the same as a
+ * 900 km one and make km/L and L/100km disagree with each other.
+ */
+export function summariseEfficiency(stats: FillStats[]): EfficiencySummary | null {
+  let distance = 0;
+  let litres = 0;
+  let cost = 0;
+  for (const s of stats) {
+    if (s.distance === null || s.consumedLitres === null || s.consumedCost === null) continue;
+    distance += s.distance;
+    litres += s.consumedLitres;
+    cost += s.consumedCost;
+  }
+  if (distance <= 0 || litres <= 0) return null;
+  return {
+    distance, litres, cost,
+    kmpl: distance / litres,
+    l100km: (litres / distance) * 100,
+    costPerKm: cost / distance,
+  };
+}
+
+export interface OdometerNeighbour {
+  odometer: number;
+  date: string;
+}
+
+/**
+ * The fill-ups on either side of `date` (YYYY-MM-DD), by date. A new or edited
+ * reading must sit strictly between them, which lets users back-fill old
+ * fill-ups while still catching typos. `excludeId` leaves out the fill being edited.
+ */
+export function odometerBounds(
+  fills: FillUp[],
+  date: string,
+  excludeId?: string,
+): { before: OdometerNeighbour | null; after: OdometerNeighbour | null } {
+  let before: OdometerNeighbour | null = null;
+  let after: OdometerNeighbour | null = null;
+  for (const f of fills) {
+    if (f.id === excludeId) continue;
+    const d = f.fill_date.slice(0, 10);
+    if (d < date) {
+      if (!before || d > before.date || (d === before.date && f.odometer > before.odometer)) {
+        before = { odometer: f.odometer, date: d };
+      }
+    } else if (d > date) {
+      if (!after || d < after.date || (d === after.date && f.odometer < after.odometer)) {
+        after = { odometer: f.odometer, date: d };
+      }
+    }
+  }
+  return { before, after };
 }

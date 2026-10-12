@@ -1,77 +1,118 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useGarage } from '../context/GarageContext';
 import { ProGate } from '../components/ProGate';
-import { ScreenHeader } from '../components/ui';
+import { AppBar, Screen, EmptyState, Fab, IconButton, Touchable, useScrollBottom, type Tone } from '../components/ui';
+import { Icon } from '../components/Icon';
 import { reminderStatus, type Reminder } from '../lib/reminders';
 import { cancelNotification } from '../lib/notifications';
 import { fmtDate, computeStats } from '../lib/fuel-utils';
 import { kmToDisplayDistance, distanceUnitLabel, type UnitSystem } from '../lib/units';
-import { useThemedStyles, type ThemeColors } from '../theme';
+import { radius, space, typography, useBottomInset, useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Maintenance'>;
+type Status = ReturnType<typeof reminderStatus>;
 
-const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<Status, string> = {
   overdue: 'Overdue', upcoming: 'Due soon', ok: 'Scheduled', done: 'Done',
 };
 
-function statusColor(colors: ThemeColors, status: string): string {
-  const map: Record<string, string> = {
-    overdue: colors.red, upcoming: colors.amber, ok: colors.muted, done: colors.green,
-  };
-  return map[status];
+const STATUS_TONE: Record<Status, Tone> = {
+  overdue: 'error', upcoming: 'warning', ok: 'neutral', done: 'success',
+};
+
+function toneFor(colors: ThemeColors, tone: Tone): { bg: string; fg: string } {
+  switch (tone) {
+    case 'error': return { bg: colors.errorContainer, fg: colors.onErrorContainer };
+    case 'warning': return { bg: colors.tertiaryContainer, fg: colors.onTertiaryContainer };
+    case 'success': return { bg: colors.successContainer, fg: colors.onSuccessContainer };
+    default: return { bg: colors.surfaceContainerHighest, fg: colors.onSurfaceVariant };
+  }
 }
 
-function ReminderRow({ reminder, currentOdometer, unitSystem, onPress, onComplete, onDelete }: {
+function ReminderRow({ reminder, currentOdometer, unitSystem, isFirst, isLast, completing, onPress, onComplete, onDelete }: {
   reminder: Reminder;
+  completing: boolean;
   currentOdometer: number | null;
   unitSystem: UnitSystem;
+  isFirst: boolean;
+  isLast: boolean;
   onPress: () => void;
   onComplete: () => void;
   onDelete: () => void;
 }) {
   const { colors, styles } = useThemedStyles(makeStyles);
   const status = reminderStatus(reminder, currentOdometer);
+  const tone = toneFor(colors, STATUS_TONE[status]);
+  const due = reminder.due_type === 'date' && reminder.due_date
+    ? `Due ${fmtDate(reminder.due_date)}`
+    : reminder.due_odometer !== null
+      ? `Due at ${Math.round(kmToDisplayDistance(reminder.due_odometer, unitSystem)).toLocaleString()} ${distanceUnitLabel(unitSystem)}`
+      : '';
+  const repeats = reminder.recurrence_interval_days || reminder.recurrence_interval_km ? 'Repeats' : null;
+  const meta = [due, repeats].filter(Boolean).join(' · ');
+
   return (
-    <Pressable onPress={onPress} onLongPress={onDelete} style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{reminder.title}</Text>
-        <Text style={styles.rowMeta}>
-          {reminder.due_type === 'date' && reminder.due_date
-            ? `Due ${fmtDate(reminder.due_date)}`
-            : reminder.due_odometer !== null
-              ? `Due at ${Math.round(kmToDisplayDistance(reminder.due_odometer, unitSystem)).toLocaleString()} ${distanceUnitLabel(unitSystem)}`
-              : ''}
-          {(reminder.recurrence_interval_days || reminder.recurrence_interval_km) ? ' · Repeats' : ''}
-        </Text>
+    <View style={[styles.rowWrap, isFirst && styles.rowFirst, isLast && styles.rowLast]}>
+      {!isFirst ? <View style={styles.divider} /> : null}
+      <View style={styles.rowLine}>
+        <Touchable
+          onPress={onPress}
+          onLongPress={onDelete}
+          accessibilityLabel={`${reminder.title}, ${STATUS_LABEL[status]}, ${meta}`}
+          accessibilityHint="Opens the reminder for editing. Long press to delete."
+          style={styles.row}
+        >
+          <View style={[styles.rowIcon, { backgroundColor: tone.bg }]}>
+            <Icon name={reminder.due_type === 'date' ? 'event' : 'speed'} size={20} color={tone.fg} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={[styles.rowTitle, status === 'done' && styles.rowTitleDone]}>{reminder.title}</Text>
+            <Text style={styles.rowMeta}>{meta}</Text>
+            <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+              <Text style={[styles.statusText, { color: tone.fg }]}>{STATUS_LABEL[status]}</Text>
+            </View>
+          </View>
+        </Touchable>
+        {status !== 'done' ? (
+          <View style={styles.rowAction}>
+            <IconButton
+              icon="check"
+              variant="tonal"
+              accessibilityLabel={`Mark ${reminder.title} done`}
+              disabled={completing}
+              onPress={onComplete}
+            />
+          </View>
+        ) : null}
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 6 }}>
-        <Text style={[styles.statusBadge, { color: statusColor(colors, status) }]}>{STATUS_LABEL[status]}</Text>
-        {status !== 'done' && (
-          <Pressable onPress={onComplete}>
-            <Text style={styles.completeLink}>Mark done</Text>
-          </Pressable>
-        )}
-      </View>
-    </Pressable>
+    </View>
   );
 }
 
 function MaintenanceList({ navigation }: Props) {
   const { fills, reminders, unitSystem, completeReminder: markReminderDone, removeReminder } = useGarage();
   const { styles } = useThemedStyles(makeStyles);
+  const bottom = useBottomInset();
+  const scrollBottom = useScrollBottom(96);
+  const [completing, setCompleting] = useState<string | null>(null);
 
   const stats = computeStats(fills);
   const currentOdometer = stats.length > 0 ? stats[stats.length - 1].fill.odometer : null;
 
   async function handleComplete(r: Reminder) {
-    await markReminderDone(r.id);
+    if (completing) return;
+    setCompleting(r.id);
+    try {
+      await markReminderDone(r.id);
+    } finally {
+      setCompleting(null);
+    }
   }
 
-  async function handleDelete(r: Reminder) {
+  function handleDelete(r: Reminder) {
     Alert.alert('Delete this reminder?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -90,31 +131,36 @@ function MaintenanceList({ navigation }: Props) {
 
   return (
     <View style={styles.body}>
-      <View style={styles.addRow}>
-        <Pressable onPress={() => navigation.navigate('AddReminder')} style={styles.addBtn}>
-          <Text style={styles.addBtnText}>+ Reminder</Text>
-        </Pressable>
-      </View>
       <FlatList
         data={sorted}
         keyExtractor={(r) => r.id}
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
+        contentContainerStyle={[styles.listContent, { paddingBottom: scrollBottom }]}
+        renderItem={({ item, index }) => (
           <ReminderRow
             reminder={item}
             currentOdometer={currentOdometer}
             unitSystem={unitSystem}
+            isFirst={index === 0}
+            isLast={index === sorted.length - 1}
+            completing={completing === item.id}
             onPress={() => navigation.navigate('AddReminder', { editId: item.id })}
-            onComplete={() => handleComplete(item)}
+            onComplete={() => void handleComplete(item)}
             onDelete={() => handleDelete(item)}
           />
         )}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No reminders yet.</Text>
-            <Text style={styles.emptyHint}>Add one for your next oil change, tyre rotation, or insurance renewal.</Text>
-          </View>
-        }
+        ListEmptyComponent={(
+          <EmptyState
+            icon="notifications"
+            title="No reminders yet"
+            body="Add one for your next oil change, tyre rotation or insurance renewal."
+          />
+        )}
+      />
+      <Fab
+        icon="add"
+        label="Reminder"
+        onPress={() => navigation.navigate('AddReminder')}
+        style={[styles.fab, { bottom: bottom + space.lg }]}
       />
     </View>
   );
@@ -122,39 +168,41 @@ function MaintenanceList({ navigation }: Props) {
 
 export default function MaintenanceScreen(props: Props) {
   const { navigation } = props;
-  const { styles } = useThemedStyles(makeStyles);
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
-      <ScreenHeader title="Maintenance" onClose={() => navigation.goBack()} />
+    <Screen>
+      <AppBar title="Maintenance" onClose={() => navigation.goBack()} />
       <ProGate
-        title="Maintenance Reminders"
-        description="Never miss an oil change, tyre rotation, or insurance renewal — by date or by odometer reading."
+        title="Maintenance reminders"
+        description="Never miss an oil change, tyre rotation or insurance renewal, by date or by odometer reading."
         onUnlockPress={() => navigation.navigate('Paywall')}
       >
         <MaintenanceList {...props} />
       </ProGate>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
     body: { flex: 1 },
-    addRow: { alignItems: 'flex-end', padding: 16, paddingBottom: 0 },
-    addBtn: { borderWidth: 1, borderColor: colors.accent, paddingVertical: 6, paddingHorizontal: 10 },
-    addBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase' },
-    listContent: { padding: 16, flexGrow: 1 },
+    listContent: { paddingHorizontal: space.lg, paddingTop: space.sm, flexGrow: 1 },
+    rowWrap: { backgroundColor: colors.surfaceContainer, overflow: 'hidden' },
+    rowFirst: { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+    rowLast: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.outlineVariant, marginLeft: 72 },
+    rowLine: { flexDirection: 'row', alignItems: 'stretch' },
     row: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
+      flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.lg,
+      paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.md, minHeight: 88,
     },
-    rowTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-    rowMeta: { fontSize: 12, color: colors.faint, marginTop: 2 },
-    statusBadge: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
-    completeLink: { fontSize: 11, color: colors.accent, fontWeight: '700' },
-    empty: { alignItems: 'center', paddingTop: 60, gap: 8, paddingHorizontal: 32 },
-    emptyText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
-    emptyHint: { color: colors.faint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+    rowAction: { justifyContent: 'center', paddingRight: space.sm },
+    rowIcon: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+    rowBody: { flex: 1, flexShrink: 1, gap: 2 },
+    rowTitle: { ...typography.bodyLarge, color: colors.onSurface },
+    rowTitleDone: { color: colors.onSurfaceVariant, textDecorationLine: 'line-through' },
+    rowMeta: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
+    statusPill: { alignSelf: 'flex-start', borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 2, marginTop: space.xs },
+    statusText: { ...typography.labelMedium },
+    fab: { position: 'absolute', right: space.lg },
   });
 }

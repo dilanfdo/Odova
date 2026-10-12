@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Line, Path, Circle, Text as SvgText } from 'react-native-svg';
 import { fmt } from '../lib/fuel-utils';
-import { useColors, type ThemeColors } from '../theme';
+import { typography, useColors, type ThemeColors } from '../theme';
 
 export function LineChart({
   points,
@@ -62,9 +62,9 @@ export function LineChart({
           <React.Fragment key={i}>
             <Line
               x1={PAD.l} y1={scaleY(y)} x2={W - PAD.r} y2={scaleY(y)}
-              stroke={colors.borderSoft} strokeWidth={1}
+              stroke={colors.outlineVariant} strokeWidth={1} opacity={0.6}
             />
-            <SvgText x={PAD.l - 6} y={scaleY(y) + 4} textAnchor="end" fontSize={10} fill={colors.faint}>
+            <SvgText x={PAD.l - 6} y={scaleY(y) + 4} textAnchor="end" fontSize={10} fill={colors.onSurfaceVariant}>
               {fmt(y, 1)}
             </SvgText>
           </React.Fragment>
@@ -79,17 +79,17 @@ export function LineChart({
         avg
       </SvgText>
 
-      <Path d={areaD} fill={color} fillOpacity={0.08} />
-      <Path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d={areaD} fill={color} fillOpacity={0.12} />
+      <Path d={pathD} fill="none" stroke={color} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
 
       {points.map((p, i) => (
-        <Circle key={i} cx={scaleX(i)} cy={scaleY(p.y)} r={3.5} fill={color} />
+        <Circle key={i} cx={scaleX(i)} cy={scaleY(p.y)} r={4.5} fill={color} stroke={colors.surfaceContainer} strokeWidth={2} />
       ))}
 
       {points.map((p, i) => {
         if (i % labelStep !== 0 && i !== points.length - 1) return null;
         return (
-          <SvgText key={i} x={scaleX(i)} y={H - 6} textAnchor="middle" fontSize={9} fill={colors.faint}>
+          <SvgText key={i} x={scaleX(i)} y={H - 6} textAnchor="middle" fontSize={10} fill={colors.onSurfaceVariant}>
             {p.x}
           </SvgText>
         );
@@ -107,12 +107,12 @@ function makeStyles(colors: ThemeColors) {
       gap: 6,
     },
     emptyTitle: {
-      fontSize: 13,
-      color: colors.faint,
+      ...typography.titleSmall,
+      color: colors.onSurface,
     },
     emptyHint: {
-      fontSize: 11,
-      color: colors.faint,
+      ...typography.bodySmall,
+      color: colors.onSurfaceVariant,
       textAlign: 'center',
       paddingHorizontal: 24,
     },

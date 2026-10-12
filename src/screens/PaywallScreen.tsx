@@ -1,30 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEntitlement } from '../context/EntitlementContext';
 import { PRO_PRICE_DISPLAY } from '../lib/entitlements';
-import { Button, ScreenHeader } from '../components/ui';
-import { useThemedStyles, type ThemeColors } from '../theme';
+import { Button, AppBar, Screen, BottomBar, Badge } from '../components/ui';
+import { Icon, type IconName } from '../components/Icon';
+import { radius, space, typography, useThemedStyles, type ThemeColors } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
 
-const BENEFITS = [
-  { title: 'Unlimited vehicles', desc: 'Track your whole fleet, not just one car' },
-  { title: 'Maintenance reminders', desc: 'Never miss an oil change, tyre rotation, or service — by date or odometer' },
-  { title: 'Cloud backup & sync', desc: 'Restore your garage automatically on a new device' },
-  { title: 'CSV export', desc: 'Full fill and service history, spreadsheet-ready' },
-  { title: 'No ads', desc: 'Ever' },
+const BENEFITS: { icon: IconName; title: string; desc: string }[] = [
+  { icon: 'car', title: 'Unlimited vehicles', desc: 'Track your whole fleet, not just one car' },
+  { icon: 'notifications', title: 'Maintenance reminders', desc: 'Never miss an oil change, tyre rotation or service, by date or odometer' },
+  { icon: 'sync', title: 'Reminders on every device', desc: 'Your maintenance reminders follow your garage to a new device' },
+  { icon: 'download', title: 'CSV export', desc: 'Full fill and service history, spreadsheet-ready' },
+  { icon: 'noAds', title: 'No ads', desc: 'Ever' },
 ];
 
 export default function PaywallScreen({ navigation }: Props) {
   const { purchasePro, restorePurchases } = useEntitlement();
-  const { styles } = useThemedStyles(makeStyles);
-  const [busy, setBusy] = useState(false);
+  const { colors, styles } = useThemedStyles(makeStyles);
+  const [busy, setBusy] = useState<'purchase' | 'restore' | null>(null);
 
   async function handlePurchase() {
-    setBusy(true);
+    setBusy('purchase');
     try {
       const result = await purchasePro();
       if (result.ok) {
@@ -35,12 +35,12 @@ export default function PaywallScreen({ navigation }: Props) {
         Alert.alert('Purchase failed', result.error);
       }
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function handleRestore() {
-    setBusy(true);
+    setBusy('restore');
     try {
       const restored = await restorePurchases();
       if (restored) {
@@ -49,60 +49,80 @@ export default function PaywallScreen({ navigation }: Props) {
         Alert.alert('No purchase found', 'We could not find a previous Pro purchase for this account.');
       }
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
-      <ScreenHeader onClose={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>ODOVA PRO</Text>
+    <Screen>
+      <AppBar onClose={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.heroIcon}>
+            <Icon name="star" size={36} color={colors.onTertiaryContainer} />
+          </View>
+          <Badge label="ODOVA PRO" align="center" />
+          <Text style={styles.title} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            Look after every vehicle, A to Z
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            One-time purchase. No subscription.
+          </Text>
         </View>
-        <Text style={styles.title}>Look after every vehicle, A to Z</Text>
-        <Text style={styles.subtitle}>One-time purchase. No subscription, no recurring charge.</Text>
 
         <View style={styles.benefits}>
           {BENEFITS.map((b) => (
-            <View key={b.title} style={styles.benefitRow}>
-              <View style={styles.checkDot} />
-              <View style={{ flex: 1 }}>
+            <View key={b.title} style={styles.benefitRow} accessible accessibilityLabel={`${b.title}. ${b.desc}`}>
+              <View style={styles.benefitIcon}>
+                <Icon name={b.icon} size={20} color={colors.onSecondaryContainer} />
+              </View>
+              <View style={styles.benefitText}>
                 <Text style={styles.benefitTitle}>{b.title}</Text>
                 <Text style={styles.benefitDesc}>{b.desc}</Text>
               </View>
             </View>
           ))}
         </View>
-
-        <Button
-          title={`Unlock Pro — ${PRO_PRICE_DISPLAY}`}
-          variant="fill"
-          onPress={handlePurchase}
-          loading={busy}
-          style={{ marginTop: 8 }}
-        />
-        <Pressable onPress={handleRestore} disabled={busy} style={{ marginTop: 16, alignItems: 'center' }}>
-          <Text style={styles.restore}>Restore Purchases</Text>
-        </Pressable>
       </ScrollView>
-    </SafeAreaView>
+      <BottomBar>
+        <Button
+          title={`Unlock Pro · ${PRO_PRICE_DISPLAY}`}
+          onPress={handlePurchase}
+          loading={busy === 'purchase'}
+          disabled={busy === 'restore'}
+        />
+        <Button
+          title="Restore purchases"
+          variant="text"
+          onPress={handleRestore}
+          loading={busy === 'restore'}
+          disabled={busy === 'purchase'}
+          style={styles.restore}
+        />
+      </BottomBar>
+    </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    content: { padding: 24, paddingTop: 12 },
-    badge: { alignSelf: 'flex-start', backgroundColor: colors.amber, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 16 },
-    badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#0b0f19' },
-    title: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 8, lineHeight: 32 },
-    subtitle: { fontSize: 13, color: colors.muted, marginBottom: 28 },
-    benefits: { gap: 18, marginBottom: 28 },
-    benefitRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-    checkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent, marginTop: 6 },
-    benefitTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-    benefitDesc: { fontSize: 12.5, color: colors.faint, marginTop: 2, lineHeight: 17 },
-    restore: { fontSize: 13, fontWeight: '700', color: colors.accent },
+    content: { paddingHorizontal: space.xl, paddingBottom: space.xl },
+    hero: { alignItems: 'center', alignSelf: 'stretch' },
+    heroIcon: {
+      width: 72, height: 72, borderRadius: radius.xl, marginBottom: space.lg,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tertiaryContainer,
+    },
+    title: { ...typography.headlineMedium, color: colors.onSurface, marginTop: space.md, textAlign: 'center' },
+    subtitle: { ...typography.bodyLarge, color: colors.onSurfaceVariant, marginTop: space.sm, marginBottom: space.xl, textAlign: 'center' },
+    benefits: { gap: space.lg },
+    benefitRow: { flexDirection: 'row', gap: space.lg, alignItems: 'flex-start' },
+    benefitIcon: {
+      width: 40, height: 40, borderRadius: radius.full,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: colors.secondaryContainer,
+    },
+    benefitText: { flex: 1, paddingTop: 2 },
+    benefitTitle: { ...typography.titleMedium, color: colors.onSurface },
+    benefitDesc: { ...typography.bodyMedium, color: colors.onSurfaceVariant },
+    restore: { marginTop: space.xs },
   });
 }

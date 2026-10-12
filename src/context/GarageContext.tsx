@@ -34,6 +34,7 @@ interface GarageContextValue {
   reminders: Reminder[];
   dataLoading: boolean;
   error: string | null;
+  clearError: () => void;
 
   startNewGarage: (nickname: string) => Promise<void>;
   useExistingCode: (code: string) => Promise<boolean>;
@@ -198,7 +199,10 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void refreshReminders(); }, [refreshReminders]);
 
+  const clearError = useCallback(() => setError(null), []);
+
   const startNewGarage = useCallback(async (nickname: string) => {
+    setError(null);
     const code = genCode(nickname.trim());
     await setStoredCode(code);
     setUserCode(code);
@@ -438,11 +442,11 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<GarageContextValue>(() => ({
-    step, userCode, currencyCode, unitSystem, vehicles, activeVehicleId, fills, reminders, dataLoading, error,
+    step, userCode, currencyCode, unitSystem, vehicles, activeVehicleId, fills, reminders, dataLoading, error, clearError,
     startNewGarage, useExistingCode, restoreFromAccount, addVehicle, updateVehicle, setActiveVehicleId, addFill,
     updateFill, removeFill, removeVehicle, deleteAllData, changeCurrency, changeUnitSystem, refreshFills, retryBoot,
     addReminder, updateReminder, completeReminder, removeReminder, refreshReminders,
-  }), [step, userCode, currencyCode, unitSystem, vehicles, activeVehicleId, fills, reminders, dataLoading, error,
+  }), [step, userCode, currencyCode, unitSystem, vehicles, activeVehicleId, fills, reminders, dataLoading, error, clearError,
     startNewGarage, useExistingCode, restoreFromAccount, addVehicle, updateVehicle, addFill, updateFill,
     removeFill, removeVehicle, deleteAllData, changeCurrency, changeUnitSystem, refreshFills, retryBoot,
     addReminder, updateReminder, completeReminder, removeReminder, refreshReminders]);

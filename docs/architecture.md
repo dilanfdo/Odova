@@ -47,7 +47,8 @@ src/
                    helper — CRUD lives in api.ts/GarageContext), units
                    (metric/imperial conversion), notifications, entitlements
                    (Pro), ads, supabase (Auth client), storage (AsyncStorage
-                   — device-local prefs only: theme, currency, units), config
+                   — device-local prefs only: theme, currency, units), config,
+                   dates (timezone-safe ISO date helpers)
   context/        GarageContext   — sync code, vehicles, fills, the onboarding
                                      step machine
                    EntitlementContext — Pro status
@@ -58,8 +59,10 @@ src/
                    Settings, Maintenance, AddReminder, Paywall
   components/     LineChart (react-native-svg port of the web SVG chart),
                    ProGate (soft-paywall wrapper), AdBanner, Skeleton,
-                   ui.tsx (shared building blocks — see theming-and-ui.md)
-  theme.tsx       Color tokens, ThemeModeProvider (light/dark/system),
+                   Icon (Material Symbols via react-native-svg),
+                   ui.tsx (shared M3 building blocks — see theming-and-ui.md)
+  theme.tsx       M3 color roles, type/radius/space scales,
+                   ThemeModeProvider (light/dark/system),
                    useColors/useThemedStyles hooks
 ```
 

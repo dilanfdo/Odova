@@ -2,7 +2,7 @@
   "expo": {
     "name": "Odova",
     "slug": "odova",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "scheme": "odova",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

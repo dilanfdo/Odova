@@ -23,12 +23,14 @@ const MODE_COPY: Record<OnboardingMode, string> = {
 
 export default function OnboardingScreen() {
   const { startNewGarage, useExistingCode, error, clearError } = useGarage();
-  const { sendMagicLink } = useAccount();
+  const { sendMagicLink, signInWithPassword } = useAccount();
   const { styles } = useThemedStyles(makeStyles);
   const [mode, setMode] = useState<OnboardingMode>('new');
   const [nickname, setNickname] = useState('');
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [usePassword, setUsePassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [signinError, setSigninError] = useState('');
@@ -70,6 +72,17 @@ export default function OnboardingScreen() {
     } else {
       setSigninError(result.error ?? 'Could not send sign-in link');
     }
+  }
+
+  async function handlePasswordSignIn() {
+    const trimmed = email.trim();
+    if (!trimmed) { setFieldError('Enter your email'); return; }
+    if (!password) { setSigninError('Enter your password'); return; }
+    setSigninError('');
+    setBusy(true);
+    const result = await signInWithPassword(trimmed, password);
+    setBusy(false);
+    if (!result.ok) setSigninError(result.error ?? 'Could not sign in');
   }
 
   function handleEditEmail() {
@@ -144,9 +157,31 @@ export default function OnboardingScreen() {
               onSubmitEditing={handleSignIn}
               error={fieldError}
             />
+            {usePassword ? (
+              <TextField
+                label="Password"
+                value={password}
+                onChangeText={(t) => { setPassword(t); setSigninError(''); }}
+                autoCapitalize="none"
+                autoComplete="current-password"
+                secureTextEntry
+                textContentType="password"
+                returnKeyType="go"
+                onSubmitEditing={handlePasswordSignIn}
+              />
+            ) : null}
             <ConsentNote />
             <ErrorText>{signinError}</ErrorText>
-            <Button title="Send magic link" icon="mail" onPress={handleSignIn} loading={busy} />
+            {usePassword ? (
+              <Button title="Sign in" onPress={handlePasswordSignIn} loading={busy} />
+            ) : (
+              <Button title="Send magic link" icon="mail" onPress={handleSignIn} loading={busy} />
+            )}
+            <Button
+              title={usePassword ? 'Email me a link instead' : 'Sign in with a password'}
+              variant="text"
+              onPress={() => { setUsePassword((v) => !v); setSigninError(''); setFieldError(null); }}
+            />
           </>
         )}
 

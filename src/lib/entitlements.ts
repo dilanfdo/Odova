@@ -89,6 +89,29 @@ export async function getRevenueCatAppUserId(): Promise<string | null> {
   }
 }
 
+/** Calls back whenever RevenueCat's customer info changes (purchase, restore, or
+ * logging in/out of an account), so Pro follows the account without a restart.
+ * Returns an unsubscribe function; a no-op in dev simulation. */
+export function subscribeToProChanges(onChange: (isPro: boolean) => void): () => void {
+  if (!useRevenueCat()) return () => {};
+  let remove: (() => void) | null = null;
+  let cancelled = false;
+  loadPurchases()
+    .then((Purchases) => {
+      if (cancelled) return;
+      const listener = (info: { entitlements: { active: Record<string, unknown> } }) => {
+        onChange(Boolean(info.entitlements.active[REVENUECAT_ENTITLEMENT_ID]));
+      };
+      Purchases.addCustomerInfoUpdateListener(listener);
+      remove = () => Purchases.removeCustomerInfoUpdateListener(listener);
+    })
+    .catch(() => { /* best-effort */ });
+  return () => {
+    cancelled = true;
+    remove?.();
+  };
+}
+
 export async function getStoredIsPro(): Promise<boolean> {
   if (useRevenueCat()) {
     try {

@@ -6,6 +6,7 @@ import { useGarage } from '../context/GarageContext';
 import { useEntitlement } from '../context/EntitlementContext';
 import { useAccount } from '../context/AccountContext';
 import * as api from '../lib/api';
+import { isPrivacyOptionsRequired, showPrivacyOptions } from '../lib/ads';
 import { CURRENCIES } from '../lib/currencies';
 import { computeStats, fmt } from '../lib/fuel-utils';
 import {
@@ -40,15 +41,19 @@ export default function SettingsScreen({ navigation }: Props) {
     deleteAllData, restoreFromAccount, fills, reminders, vehicles, activeVehicleId,
   } = useGarage();
   const { isPro, devClearPro, purchasePro } = useEntitlement();
-  const { session, sendMagicLink, signOut, deleteAccount } = useAccount();
+  const { session, sendMagicLink, signInWithPassword, signOut, deleteAccount } = useAccount();
   const { mode, setMode } = useThemeMode();
   const { colors, styles } = useThemedStyles(makeStyles);
   const scrollBottom = useScrollBottom();
   const [copied, setCopied] = useState(false);
+  const [privacyOptionsRequired, setPrivacyOptionsRequired] = useState(false);
+  useEffect(() => { void isPrivacyOptionsRequired().then(setPrivacyOptionsRequired); }, []);
   const [exporting, setExporting] = useState(false);
   const [accountDeleteBusy, setAccountDeleteBusy] = useState(false);
 
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [usePassword, setUsePassword] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -80,6 +85,16 @@ export default function SettingsScreen({ navigation }: Props) {
     setAuthBusy(false);
     if (result.ok) setMagicLinkSent(true);
     else setAuthError(result.error ?? 'Could not send magic link');
+  }
+
+  async function handlePasswordSignIn() {
+    if (!email.trim()) { setAuthError('Enter your email'); return; }
+    if (!password) { setAuthError('Enter your password'); return; }
+    setAuthError(null);
+    setAuthBusy(true);
+    const result = await signInWithPassword(email.trim(), password);
+    setAuthBusy(false);
+    if (!result.ok) setAuthError(result.error ?? 'Could not sign in');
   }
 
   async function handleClaim() {
@@ -344,8 +359,31 @@ export default function SettingsScreen({ navigation }: Props) {
                 background={colors.surfaceContainer}
                 error={authError}
               />
+              {usePassword ? (
+                <TextField
+                  label="Password"
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); setAuthError(null); }}
+                  autoCapitalize="none"
+                  autoComplete="current-password"
+                  secureTextEntry
+                  textContentType="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handlePasswordSignIn}
+                  background={colors.surfaceContainer}
+                />
+              ) : null}
               <ConsentNote />
-              <Button title="Send magic link" icon="mail" variant="tonal" onPress={handleSendMagicLink} loading={authBusy} />
+              {usePassword ? (
+                <Button title="Sign in" variant="tonal" onPress={handlePasswordSignIn} loading={authBusy} />
+              ) : (
+                <Button title="Send magic link" icon="mail" variant="tonal" onPress={handleSendMagicLink} loading={authBusy} />
+              )}
+              <Button
+                title={usePassword ? 'Email me a link instead' : 'Sign in with a password'}
+                variant="text"
+                onPress={() => { setUsePassword((v) => !v); setAuthError(null); }}
+              />
             </Card>
           )
         ) : (
@@ -398,6 +436,21 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <SectionHeader title="Units" />
         <SegmentedButtons options={UNIT_OPTIONS} value={unitSystem} onChange={changeUnitSystem} accessibilityLabel="Units" />
+
+        {privacyOptionsRequired ? (
+          <>
+            <SectionHeader title="Privacy" />
+            <ListGroup>
+              <ListItem
+                leadingIcon="info"
+                leadingTone="primary"
+                headline="Ad privacy options"
+                supporting="Review or change your ad consent choices"
+                onPress={() => { void showPrivacyOptions(); }}
+              />
+            </ListGroup>
+          </>
+        ) : null}
 
         <SectionHeader title="Data" />
         <ListGroup>

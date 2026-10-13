@@ -19,6 +19,7 @@ interface AccountContextValue {
   session: Session | null;
   loading: boolean;
   sendMagicLink: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ ok: boolean; error?: string }>;
 }
@@ -99,6 +100,18 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return error ? { ok: false, error: friendlyError(error.message) } : { ok: true };
   }, []);
 
+  // Optional alternative to the magic link, for accounts that have a password
+  // (none are created by the app itself). Needed by Play review, which can't
+  // open an inbox.
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) return { ok: true };
+    const msg = /invalid login credentials/i.test(error.message)
+      ? 'Email or password is incorrect.'
+      : friendlyError(error.message);
+    return { ok: false, error: msg };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -113,7 +126,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AccountContext.Provider value={{ session, loading, sendMagicLink, signOut, deleteAccount }}>
+    <AccountContext.Provider value={{ session, loading, sendMagicLink, signInWithPassword, signOut, deleteAccount }}>
       {children}
     </AccountContext.Provider>
   );

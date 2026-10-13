@@ -22,6 +22,10 @@ export function EntitlementProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
+  // Pro follows the RevenueCat identity, which changes when the user signs in
+  // or out; without this it would only be re-read on the next app start.
+  useEffect(() => entitlements.subscribeToProChanges(setIsPro), []);
+
   const purchasePro = useCallback(async () => {
     const result = await entitlements.purchasePro();
     if (result.ok) setIsPro(true);
